@@ -1,0 +1,10 @@
+dist
+coverage
+node_modules
+references/originals
+references/visual
+docs
+prompts
+AGENTS.md
+README.md
+package-lock.json

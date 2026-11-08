@@ -1,0 +1,86 @@
+.shell {
+  min-height: 100dvh;
+  background: var(--color-background);
+}
+
+.participantHeader,
+.adminHeader {
+  border-bottom: var(--border-width) solid var(--color-primary);
+}
+
+.participantHeader {
+  background: var(--color-surface);
+}
+
+.adminHeader {
+  color: var(--color-surface);
+  background: var(--color-ink);
+}
+
+.headerInner,
+.adminHeaderInner {
+  display: flex;
+  min-height: var(--header-height);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right))
+    var(--space-3) max(var(--space-4), env(safe-area-inset-left));
+}
+
+.headerInner {
+  width: min(100%, var(--participant-width));
+  margin: 0 auto;
+}
+
+.participantStatus {
+  margin-left: auto;
+}
+
+.adminHeaderInner {
+  width: min(100%, var(--content-width));
+  margin: 0 auto;
+  justify-content: space-between;
+}
+
+.adminBrandGroup,
+.adminActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.adminActions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.brandLogo {
+  display: block;
+  width: 2.75rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.participantBrand,
+.adminBrand {
+  font-size: var(--font-size-lg);
+  font-style: italic;
+  font-weight: 800;
+}
+
+@media (max-width: 40rem) {
+  .adminHeaderInner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .adminActions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .adminActions > * {
+    flex: 1 1 auto;
+  }
+}
