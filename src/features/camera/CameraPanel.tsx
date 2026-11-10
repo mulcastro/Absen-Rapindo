@@ -27,14 +27,12 @@ export function CameraPanel({ videoRef, state }: CameraPanelProps) {
       <div className={styles.shade} aria-hidden="true" />
       <div className={styles.faceGuide} aria-hidden="true" />
       <p className={styles.instruction}>
-        {state.status === 'idle' && 'Kamera belum diaktifkan'}
-        {state.status === 'requesting' && 'Meminta izin kamera…'}
+        {state.status === 'idle' && 'Aktifkan kamera untuk melihat pratinjau'}
+        {state.status === 'requesting' && 'Menyiapkan kamera…'}
         {state.status === 'ready' && 'Posisikan wajah di dalam bingkai'}
-        {state.status === 'capturing' &&
-          `Mengambil gambar ${state.capturedCount}/${state.targetCount}…`}
-        {state.status === 'captured' &&
-          `${state.capturedCount} frame siap di memori sesi`}
-        {state.status === 'error' && 'Kamera memerlukan perhatian'}
+        {state.status === 'capturing' && 'Tetap diam, gambar sedang diambil…'}
+        {state.status === 'captured' && 'Pengambilan gambar selesai'}
+        {state.status === 'error' && 'Kamera belum dapat digunakan'}
       </p>
     </section>
   );

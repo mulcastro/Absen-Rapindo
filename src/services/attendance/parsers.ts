@@ -21,6 +21,18 @@ function stringField(source: Record<string, unknown>, key: string): string {
   return value;
 }
 
+function optionalStringField(
+  source: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = source[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw malformed(`Field ${key} tidak valid.`);
+  }
+  return value;
+}
+
 function positiveInteger(source: Record<string, unknown>, key: string): number {
   const value = source[key];
   if (!Number.isInteger(value) || Number(value) < 1) {
@@ -61,6 +73,7 @@ function parseAttendance(value: unknown): ConfirmedAttendance {
   return {
     id: stringField(source, 'id'),
     sessionId: stringField(source, 'session_id'),
+    sessionTitle: optionalStringField(source, 'session_title'),
     participantName: stringField(source, 'participant_name'),
     status,
     markedAt: stringField(source, 'marked_at'),

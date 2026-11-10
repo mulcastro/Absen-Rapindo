@@ -5,8 +5,45 @@ import userEvent from '@testing-library/user-event';
 
 import { App } from './App';
 
+vi.mock('../services/attendance', async () => {
+  const actual = await vi.importActual('../services/attendance');
+  const { createMockAttendanceService } =
+    await import('../test/fixtures/attendanceService');
+  return {
+    ...actual,
+    loadAttendanceService: () => Promise.resolve(createMockAttendanceService()),
+  };
+});
+
+vi.mock('../services/admin', async () => {
+  const actual = await vi.importActual('../services/admin');
+  const { createMockAdminService } =
+    await import('../test/fixtures/adminService');
+  return {
+    ...actual,
+    loadAdminService: () => Promise.resolve(createMockAdminService()),
+  };
+});
+
+vi.mock('../services/identity', async () => {
+  const actual = await vi.importActual('../services/identity');
+  const { createMockIdentityService } =
+    await import('../test/fixtures/identityService');
+  return {
+    ...actual,
+    loadIdentityService: () => Promise.resolve(createMockIdentityService()),
+  };
+});
+
+async function loginAsAdmin(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByLabelText('Nama pengguna'), 'admin');
+  await user.type(screen.getByLabelText('Kata sandi'), 'rahasia');
+  await user.type(screen.getByLabelText('Kode TOTP'), '123456');
+  await user.click(screen.getByRole('button', { name: 'Masuk' }));
+}
+
 describe('App', () => {
-  it('menampilkan layar absensi simulasi pada route peserta', async () => {
+  it('menampilkan layar absensi dari service pada route peserta', async () => {
     render(
       <MemoryRouter initialEntries={['/absen/sesi-contoh']}>
         <App />
@@ -17,30 +54,10 @@ describe('App', () => {
       await screen.findByRole('button', { name: 'Izinkan dan ambil lokasi' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Sesi terbuka')).toBeInTheDocument();
+    expect(screen.getByText('Wajah dalam bingkai')).toBeInTheDocument();
     expect(
-      screen.getByText('Panduan ini bukan hasil deteksi otomatis.'),
-    ).toBeInTheDocument();
-  });
-
-  it('sesi geo opsional tidak meminta GPS dan langsung menawarkan kamera', async () => {
-    const watchPosition = vi.fn();
-    Object.defineProperty(navigator, 'geolocation', {
-      configurable: true,
-      value: { watchPosition, clearWatch: vi.fn() },
-    });
-    render(
-      <MemoryRouter initialEntries={['/absen/sesi-contoh?session=optional']}>
-        <App />
-      </MemoryRouter>,
-    );
-
-    expect(
-      await screen.findByRole('button', { name: 'Aktifkan kamera depan' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Browser tidak akan meminta izin GPS/),
+      screen.getByRole('button', { name: /Kembali ke daftar sesi/ }),
     ).toBeVisible();
-    expect(watchPosition).not.toHaveBeenCalled();
   });
 
   it('menawarkan retry ketika izin lokasi ditolak', async () => {
@@ -80,26 +97,9 @@ describe('App', () => {
     expect(watchPosition).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    ['closed', 'Sesi sudah ditutup'],
-    ['expired', 'Sesi telah kedaluwarsa'],
-    ['unknown', 'Status sesi belum termuat'],
-  ])('menampilkan state sesi %s tanpa CTA absensi', async (state, title) => {
-    render(
-      <MemoryRouter initialEntries={[`/absen/sesi-contoh?session=${state}`]}>
-        <App />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole('heading', { name: title })).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: /lokasi|kamera|frame/i }),
-    ).not.toBeInTheDocument();
-  });
-
   it('memberikan state unknown tanpa menampilkan sukses', async () => {
     render(
-      <MemoryRouter initialEntries={['/hasil/attempt-contoh?state=empty']}>
+      <MemoryRouter initialEntries={['/hasil/attempt-contoh']}>
         <App />
       </MemoryRouter>,
     );
@@ -112,9 +112,15 @@ describe('App', () => {
     expect(
       screen.queryByRole('heading', { name: 'Absen berhasil' }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Periksa kembali' }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Kembali ke daftar sesi' }),
+    ).toBeVisible();
   });
 
-  it('memuat ulang hasil simulasi berdasarkan attemptId tanpa router state', async () => {
+  it('memuat ulang hasil berdasarkan attemptId tanpa router state', async () => {
     render(
       <MemoryRouter initialEntries={['/hasil/attempt-simulasi-001']}>
         <App />
@@ -122,17 +128,20 @@ describe('App', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Absen berhasil' }),
+      await screen.findByRole('heading', { name: 'Absensi berhasil' }),
     ).toBeVisible();
-    expect(screen.getByText('Peserta Simulasi')).toBeVisible();
+    expect(screen.getByText('Ahmad Fauzi')).toBeVisible();
   });
 
   it('memisahkan hadir sah, terlambat, belum, dan percobaan gagal pada rekap', async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/admin/sesi/sesi-contoh']}>
         <App />
       </MemoryRouter>,
     );
+
+    await loginAsAdmin(user);
 
     expect(
       await screen.findByRole('heading', {
@@ -149,10 +158,13 @@ describe('App', () => {
     expect(screen.queryByText('/ 35')).not.toBeInTheDocument();
     expect(screen.getAllByText('Terlambat').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Belum').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Gagal').length).toBeGreaterThan(0);
+    expect(screen.getByText(/08.20 — Wajah belum cocok/)).toBeInTheDocument();
+    expect(screen.getByText('Ayu Pratama').parentElement).toHaveTextContent(
+      'Hadir',
+    );
   });
 
-  it('aksi admin memberi feedback tanpa keberhasilan semu', async () => {
+  it('aksi ekspor admin memberi konfirmasi selesai', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/admin/sesi/sesi-contoh']}>
@@ -160,13 +172,32 @@ describe('App', () => {
       </MemoryRouter>,
     );
 
+    await loginAsAdmin(user);
+
     await user.click(
       await screen.findByRole('button', { name: 'Ekspor Excel' }),
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Ekspor belum terhubung. Tidak ada berkas yang dibuat.',
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Daftar hadir Excel berhasil diunduh.',
     );
+  });
+
+  it('keluar dari area admin dan kembali ke halaman masuk', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/admin/sesi']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await loginAsAdmin(user);
+    await user.click(await screen.findByRole('button', { name: 'Keluar' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Masuk admin' }),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Keluar' })).toBeNull();
   });
 
   it('menampilkan halaman tidak ditemukan untuk route asing', () => {

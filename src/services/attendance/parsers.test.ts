@@ -34,12 +34,16 @@ describe('attendance runtime parsers', () => {
         attendance: {
           id: 'at-1',
           session_id: 's-1',
+          session_title: 'Pelatihan K3 Umum',
           participant_name: 'Peserta',
           status: 'hadir',
           marked_at: '2026-11-08T01:00:00Z',
         },
-      }).outcome,
-    ).toBe('already_recorded');
+      }),
+    ).toMatchObject({
+      outcome: 'already_recorded',
+      attendance: { sessionTitle: 'Pelatihan K3 Umum' },
+    });
   });
 
   it('memetakan rekonsiliasi processing ke unknown', () => {

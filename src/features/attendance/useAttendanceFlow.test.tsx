@@ -25,6 +25,7 @@ function service(
   overrides: Partial<AttendanceService> = {},
 ): AttendanceService {
   return {
+    listActiveSessions: vi.fn().mockResolvedValue([]),
     startAttendance: vi.fn().mockResolvedValue(attempt),
     submitAttendance: vi.fn().mockResolvedValue({
       outcome: 'accepted',
@@ -103,6 +104,46 @@ describe('useAttendanceFlow', () => {
       expect(submitAttendance).toHaveBeenCalledOnce();
     },
   );
+
+  it('memulihkan hasil unknown tanpa mengirim ulang absensi', async () => {
+    const submitAttendance = vi
+      .fn()
+      .mockRejectedValue(new ServiceError('network', 'Koneksi terputus.'));
+    const recoveredResult = {
+      outcome: 'accepted' as const,
+      requestId: 'r-1',
+      attendance: {
+        id: 'at-1',
+        sessionId: 's-1',
+        participantName: 'Peserta',
+        status: 'hadir' as const,
+        markedAt: '2026-11-08T00:00:00Z',
+      },
+    };
+    const reconcileAttendance = vi.fn().mockResolvedValue({
+      status: 'confirmed',
+      result: recoveredResult,
+    });
+    const adapter = service({ submitAttendance, reconcileAttendance });
+    const loader = () => Promise.resolve(adapter);
+    const confirmed = vi.fn();
+    const { result } = renderHook(() => useAttendanceFlow('s-1', loader));
+    act(() => result.current.markReady());
+    await act(() =>
+      result.current.run({
+        sessionId: 's-1',
+        location: null,
+        capture: () => Promise.resolve([frame]),
+        onConfirmed: confirmed,
+      }),
+    );
+    await act(() => result.current.recover(confirmed));
+
+    expect(reconcileAttendance).toHaveBeenCalledWith('a-1');
+    expect(submitAttendance).toHaveBeenCalledOnce();
+    expect(confirmed).toHaveBeenCalledWith('a-1');
+    expect(result.current.state.phase).toBe('accepted');
+  });
 
   it('menolak nonce expired sebelum capture', async () => {
     const adapter = service({

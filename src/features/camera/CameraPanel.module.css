@@ -1,9 +1,9 @@
 .panel {
   position: relative;
   display: grid;
-  min-height: 21.25rem;
+  width: 100%;
+  height: clamp(20rem, 46dvh, 24rem);
   place-items: center;
-  align-content: center;
   overflow: hidden;
   border-radius: var(--radius);
   color: var(--color-surface);
@@ -36,22 +36,46 @@
 
 .faceGuide {
   z-index: 1;
-  width: min(12.75rem, 72vw);
-  aspect-ratio: 0.76;
+  width: clamp(10.5rem, 58%, 13.5rem);
+  aspect-ratio: 0.74;
+  margin-bottom: 2.75rem;
   border: 3px dashed var(--color-surface);
   border-radius: 50%;
 }
 
 .instruction {
+  position: absolute;
   z-index: 1;
-  margin: var(--space-3) var(--space-4) 0;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  left: var(--space-4);
+  margin: 0;
   font-weight: 600;
   text-align: center;
 }
 
-@media (max-width: 23rem) {
+@media (min-width: 40rem) {
   .panel {
-    min-height: 19rem;
+    height: clamp(22rem, 48dvh, 25rem);
+  }
+
+  .faceGuide {
+    width: clamp(11.5rem, 46%, 13.5rem);
+    margin-bottom: 2.25rem;
+  }
+}
+
+@media (max-width: 23rem) {
+  .faceGuide {
+    width: min(58%, 11.75rem);
+    margin-bottom: 2.5rem;
+  }
+
+  .instruction {
+    right: var(--space-3);
+    bottom: var(--space-3);
+    left: var(--space-3);
+    font-size: var(--font-size-sm);
   }
 }
 

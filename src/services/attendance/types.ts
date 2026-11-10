@@ -6,6 +6,15 @@ export interface CapturePolicy {
   durationMs: number;
 }
 
+export interface ParticipantSession {
+  id: string;
+  title: string;
+  schedule: string;
+  locationLabel: string;
+  status: 'open';
+  geoRequired: boolean;
+}
+
 export interface AttendanceAttempt {
   attemptId: string;
   nonce: string;
@@ -17,6 +26,7 @@ export interface AttendanceAttempt {
 export interface ConfirmedAttendance {
   id: string;
   sessionId: string;
+  sessionTitle?: string;
   participantName: string;
   status: 'hadir' | 'terlambat';
   markedAt: string;
@@ -48,6 +58,9 @@ export type ReconciliationResult =
   | { status: 'unknown' };
 
 export interface AttendanceService {
+  listActiveSessions(
+    signal?: AbortSignal,
+  ): Promise<readonly ParticipantSession[]>;
   startAttendance(
     sessionId: string,
     clientRequestId: string,

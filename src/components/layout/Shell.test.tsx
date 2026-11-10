@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import { AdminShell } from './AdminShell';
 import { ParticipantShell } from './ParticipantShell';
+import { AuthContext } from '../../features/auth/authContextValue';
 
 describe('shell aplikasi', () => {
   it('menampilkan logo resmi pada shell peserta', () => {
@@ -20,14 +22,33 @@ describe('shell aplikasi', () => {
 
   it('menampilkan tindakan admin tanpa mengubahnya menjadi navigasi palsu', () => {
     render(
-      <AdminShell actions={<button type="button">Tindakan admin</button>}>
-        <main>Konten admin</main>
-      </AdminShell>,
+      <MemoryRouter initialEntries={['/admin/sesi']}>
+        <AuthContext.Provider
+          value={{
+            session: { displayName: 'Admin', role: 'admin' },
+            restoring: false,
+            login: vi.fn(),
+            logout: vi.fn().mockResolvedValue(undefined),
+          }}
+        >
+          <AdminShell actions={<button type="button">Tindakan admin</button>}>
+            <main>Konten admin</main>
+          </AdminShell>
+        </AuthContext.Provider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText('Rekap Absensi')).toBeVisible();
     expect(
       screen.getByRole('button', { name: 'Tindakan admin' }),
     ).toBeEnabled();
+    expect(screen.getByRole('link', { name: 'Sesi' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(
+      screen.getByRole('link', { name: 'Peserta & undangan' }),
+    ).toHaveAttribute('href', '/admin/peserta');
+    expect(screen.getByRole('button', { name: 'Keluar' })).toBeEnabled();
   });
 });

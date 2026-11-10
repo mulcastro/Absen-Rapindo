@@ -11,12 +11,13 @@ type ResultState =
   | { status: 'confirmed'; result: AttendanceSubmitResult; message: null }
   | { status: 'unknown' | 'unavailable'; result: null; message: string };
 
-export function useAttendanceResult(attemptId: string): ResultState {
+export function useAttendanceResult(attemptId: string) {
   const [state, setState] = useState<ResultState>({
     status: 'loading',
     result: null,
     message: null,
   });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -37,8 +38,7 @@ export function useAttendanceResult(attemptId: string): ResultState {
           setState({
             status: 'unknown',
             result: null,
-            message:
-              'Hasil belum ditemukan. Jangan mengulang absensi otomatis.',
+            message: 'Hasil masih diproses. Jangan melakukan absensi ulang.',
           });
         }
       })
@@ -51,15 +51,18 @@ export function useAttendanceResult(attemptId: string): ResultState {
           status: unavailable ? 'unavailable' : 'unknown',
           result: null,
           message: unavailable
-            ? 'Endpoint pemeriksaan ulang hasil belum disepakati. Hasil tidak dapat dipulihkan setelah reload.'
-            : 'Hasil absensi belum dapat dipastikan.',
+            ? 'Status absensi belum dapat diperiksa saat ini. Silakan coba kembali.'
+            : 'Hasil absensi belum dapat dipastikan. Periksa kembali saat koneksi stabil.',
         });
       });
     return () => {
       active = false;
       controller.abort();
     };
-  }, [attemptId]);
+  }, [attemptId, refreshKey]);
 
-  return state;
+  return {
+    ...state,
+    refresh: () => setRefreshKey((current) => current + 1),
+  };
 }

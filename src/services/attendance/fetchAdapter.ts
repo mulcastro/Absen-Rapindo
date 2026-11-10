@@ -1,12 +1,10 @@
 import { appConfig } from '../../config/appConfig';
-import {
-  parseAttendanceAttempt,
-  parseAttendanceResult,
-  parseReconciliationResult,
-} from './parsers';
+import { csrfHeaders } from '../httpClient';
+import { parseAttendanceAttempt, parseReconciliationResult } from './parsers';
 import {
   ServiceError,
   type AttendanceService,
+  type ParticipantSession,
   type SubmitAttendanceInput,
 } from './types';
 
@@ -116,8 +114,60 @@ async function request(
 
 export function createFetchAttendanceService(
   fetcher: FetchLike = fetch,
+  csrfProvider: () => Promise<Record<string, string>> = csrfHeaders,
 ): AttendanceService {
   return {
+    async listActiveSessions(signal) {
+      const response = await request(
+        fetcher,
+        `${appConfig.apiBaseUrl}/sessions/active`,
+        {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+          signal,
+        },
+      );
+      const body = await readJson(response);
+      if (!Array.isArray(body)) {
+        throw new ServiceError(
+          'malformed-response',
+          'Daftar sesi dari server tidak valid.',
+        );
+      }
+      return body.map((value): ParticipantSession => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          throw new ServiceError(
+            'malformed-response',
+            'Data sesi dari server tidak valid.',
+          );
+        }
+        const item = value as Record<string, unknown>;
+        if (
+          typeof item.id !== 'string' ||
+          typeof item.title !== 'string' ||
+          typeof item.starts_at !== 'string' ||
+          typeof item.ends_at !== 'string' ||
+          typeof item.geo_required !== 'boolean' ||
+          item.status !== 'open'
+        ) {
+          throw new ServiceError(
+            'malformed-response',
+            'Field sesi dari server tidak valid.',
+          );
+        }
+        return {
+          id: item.id,
+          title: item.title,
+          schedule: `${new Date(item.starts_at).toLocaleString('id-ID')} — ${new Date(item.ends_at).toLocaleString('id-ID')}`,
+          locationLabel: item.geo_required
+            ? 'Lokasi diwajibkan oleh sesi'
+            : 'Lokasi tidak diwajibkan',
+          status: 'open',
+          geoRequired: item.geo_required,
+        };
+      });
+    },
     async startAttendance(sessionId, clientRequestId, signal) {
       const response = await request(
         fetcher,
@@ -125,7 +175,10 @@ export function createFetchAttendanceService(
         {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(await csrfProvider()),
+          },
           body: JSON.stringify({
             session_id: sessionId,
             client_request_id: clientRequestId,
@@ -137,34 +190,16 @@ export function createFetchAttendanceService(
     },
     async submitAttendance(input: SubmitAttendanceInput, signal) {
       const form = new FormData();
-      form.set(
-        'metadata',
-        JSON.stringify({
-          attempt_id: input.attempt.attemptId,
-          nonce: input.attempt.nonce,
-          client_request_id: input.clientRequestId,
-          session_id: input.sessionId,
-          location: input.location
-            ? {
-                latitude: input.location.latitude,
-                longitude: input.location.longitude,
-                accuracy_m: input.location.accuracy,
-                captured_at: input.location.capturedAt,
-              }
-            : null,
-          frames: input.frames.map((frame) => ({
-            index: frame.index,
-            captured_at: frame.capturedAt,
-            elapsed_ms: frame.elapsedMs,
-          })),
-        }),
-      );
+      form.set('attempt_id', input.attempt.attemptId);
+      form.set('nonce', input.attempt.nonce);
+      if (input.location) {
+        form.set('latitude', String(input.location.latitude));
+        form.set('longitude', String(input.location.longitude));
+        form.set('accuracy', String(input.location.accuracy));
+        form.set('captured_at', input.location.capturedAt);
+      }
       input.frames.forEach((frame) =>
-        form.append(
-          `frame_${frame.index}`,
-          frame.blob,
-          `frame_${frame.index}.jpg`,
-        ),
+        form.append('frames', frame.blob, `frame_${frame.index}.jpg`),
       );
       const response = await request(
         fetcher,
@@ -172,11 +207,23 @@ export function createFetchAttendanceService(
         {
           method: 'POST',
           credentials: 'same-origin',
+          headers: await csrfProvider(),
           body: form,
           signal,
         },
       );
-      return parseAttendanceResult(await readJson(response));
+      await readJson(response);
+      const reconciled = await this.reconcileAttendance(
+        input.attempt.attemptId,
+        signal,
+      );
+      if (reconciled.status === 'unknown') {
+        throw new ServiceError(
+          'reconciliation-unavailable',
+          'Server belum memberikan hasil akhir percobaan.',
+        );
+      }
+      return reconciled.result;
     },
     async reconcileAttendance(attemptId, signal) {
       const response = await request(

@@ -3,34 +3,20 @@ import { describe, expect, it } from 'vitest';
 import { createAppConfig } from './appConfig';
 
 describe('createAppConfig', () => {
-  it('menggunakan konfigurasi API aman sebagai nilai awal', () => {
-    expect(createAppConfig({})).toEqual({
-      apiBaseUrl: '/api',
-      dataSource: 'api',
-    });
+  it('menggunakan API satu-origin sebagai nilai awal', () => {
+    expect(createAppConfig({})).toEqual({ apiBaseUrl: '/api' });
   });
 
-  it('menggunakan mock sebagai nilai awal khusus development', () => {
-    expect(createAppConfig({ DEV: true, PROD: false })).toEqual({
-      apiBaseUrl: '/api',
-      dataSource: 'mock',
+  it('menerima path relatif dan URL HTTPS', () => {
+    expect(createAppConfig({ VITE_API_BASE_URL: '/layanan/' })).toEqual({
+      apiBaseUrl: '/layanan',
     });
+    expect(
+      createAppConfig({ VITE_API_BASE_URL: 'https://contoh.test/api/' }),
+    ).toEqual({ apiBaseUrl: 'https://contoh.test/api' });
   });
 
-  it('mengizinkan mock hanya ketika bukan produksi', () => {
-    expect(createAppConfig({ VITE_DATA_SOURCE: 'mock', PROD: false })).toEqual({
-      apiBaseUrl: '/api',
-      dataSource: 'mock',
-    });
-    expect(() =>
-      createAppConfig({ VITE_DATA_SOURCE: 'mock', PROD: true }),
-    ).toThrow('Mode mock tidak diizinkan');
-  });
-
-  it('menolak sumber data dan URL publik yang tidak valid', () => {
-    expect(() => createAppConfig({ VITE_DATA_SOURCE: 'fixture' })).toThrow(
-      'VITE_DATA_SOURCE',
-    );
+  it('menolak URL HTTP', () => {
     expect(() =>
       createAppConfig({ VITE_API_BASE_URL: 'http://contoh.test/api' }),
     ).toThrow('URL HTTPS');

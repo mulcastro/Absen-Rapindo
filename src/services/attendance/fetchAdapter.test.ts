@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFetchAttendanceService } from './fetchAdapter';
 
+const csrf = () => Promise.resolve({ 'X-CSRF-Token': 'csrf-test' });
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -18,6 +20,7 @@ describe('Fetch attendance adapter', () => {
   ] as const)('memetakan HTTP %s', async (status, code) => {
     const service = createFetchAttendanceService(
       vi.fn().mockResolvedValue(json({}, status)),
+      csrf,
     );
     await expect(service.startAttendance('s-1', 'c-1')).rejects.toMatchObject({
       code,
@@ -30,6 +33,7 @@ describe('Fetch attendance adapter', () => {
   ] as const)('memetakan error server %s', async (serverCode, code) => {
     const service = createFetchAttendanceService(
       vi.fn().mockResolvedValue(json({ error: { code: serverCode } }, 409)),
+      csrf,
     );
     await expect(service.startAttendance('s-1', 'c-1')).rejects.toMatchObject({
       code,
@@ -39,6 +43,7 @@ describe('Fetch attendance adapter', () => {
   it('menolak JSON malformed pada boundary runtime', async () => {
     const service = createFetchAttendanceService(
       vi.fn().mockResolvedValue(json({ attempt_id: 'tidak-lengkap' })),
+      csrf,
     );
     await expect(service.startAttendance('s-1', 'c-1')).rejects.toMatchObject({
       code: 'malformed-response',
@@ -48,9 +53,11 @@ describe('Fetch attendance adapter', () => {
   it('membedakan timeout dan network error', async () => {
     const timeout = createFetchAttendanceService(
       vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
+      csrf,
     );
     const network = createFetchAttendanceService(
       vi.fn().mockRejectedValue(new TypeError('offline')),
+      csrf,
     );
     await expect(timeout.startAttendance('s-1', 'c-1')).rejects.toMatchObject({
       code: 'timeout',

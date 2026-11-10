@@ -48,9 +48,11 @@ export function useAttendanceFlow(
 ) {
   const [state, setState] = useState<FlowState>(INITIAL_STATE);
   const runningRef = useRef(false);
+  const pendingAttemptIdRef = useRef<string | null>(null);
 
   const reset = useCallback(() => {
     runningRef.current = false;
+    pendingAttemptIdRef.current = null;
     setState(INITIAL_STATE);
   }, []);
 
@@ -75,6 +77,7 @@ export function useAttendanceFlow(
           sessionId,
           clientRequestId,
         );
+        pendingAttemptIdRef.current = attempt.attemptId;
         setState({ phase: 'capturing', message: null, result: null });
         const frames = await capture({
           frameCount: attempt.capture.frameCount,
@@ -91,9 +94,11 @@ export function useAttendanceFlow(
           frames,
         });
         if (result.outcome === 'rejected') {
+          pendingAttemptIdRef.current = null;
           setState({ phase: 'rejected', message: result.message, result });
           return;
         }
+        pendingAttemptIdRef.current = null;
         setState({ phase: 'accepted', message: null, result });
         onConfirmed(attempt.attemptId);
       } catch (error) {
@@ -111,6 +116,7 @@ export function useAttendanceFlow(
             result: null,
           });
         } else {
+          pendingAttemptIdRef.current = null;
           setState({
             phase: 'rejected',
             message:
@@ -126,5 +132,57 @@ export function useAttendanceFlow(
     [serviceLoader, state.phase],
   );
 
-  return { state, markReady, run, reset };
+  const recover = useCallback(
+    async (onConfirmed: (attemptId: string) => void) => {
+      const attemptId = pendingAttemptIdRef.current;
+      if (runningRef.current || state.phase !== 'unknown' || !attemptId) return;
+      runningRef.current = true;
+      setState((current) => ({
+        ...current,
+        message: 'Memeriksa status absensi…',
+      }));
+      try {
+        const service = await serviceLoader();
+        const recovered = await service.reconcileAttendance(attemptId);
+        if (recovered.status === 'unknown') {
+          setState({
+            phase: 'unknown',
+            message:
+              'Status absensi belum tersedia. Tunggu beberapa saat, lalu periksa kembali.',
+            result: null,
+          });
+          return;
+        }
+        pendingAttemptIdRef.current = null;
+        if (recovered.result.outcome === 'rejected') {
+          setState({
+            phase: 'rejected',
+            message: recovered.result.message,
+            result: recovered.result,
+          });
+          return;
+        }
+        setState({
+          phase: 'accepted',
+          message: null,
+          result: recovered.result,
+        });
+        onConfirmed(attemptId);
+      } catch (error) {
+        setState({
+          phase: 'unknown',
+          message:
+            error instanceof ServiceError
+              ? error.message
+              : 'Status absensi belum dapat diperiksa. Pastikan koneksi tersedia lalu coba kembali.',
+          result: null,
+        });
+      } finally {
+        runningRef.current = false;
+      }
+    },
+    [serviceLoader, state.phase],
+  );
+
+  return { state, markReady, run, recover, reset };
 }

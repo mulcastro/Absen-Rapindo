@@ -1,24 +1,93 @@
+# Dependency, virtual environment, dan cache
 node_modules/
-dist/
-coverage/
+.venv/
+**/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
 .vitest/
+
+# Build, coverage, dan hasil pengujian
+dist/
+build/
+coverage/
+htmlcov/
+.coverage
 playwright-report/
 test-results/
+*.log
+
+# Rahasia dan konfigurasi lokal
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
 *.local
-.venv/
-__pycache__/
-*.pyc
-backend/data/
-backend/models/
-deploy/secrets/
 *.key
 *.pem
-.DS_Store
-Thumbs.db
+*.p12
+*.pfx
+*.jks
+*credentials*.json
+*service-account*.json
+.envrc
+.npmrc
+.pypirc
+.netrc
+*.secret
+*.token
+*.kdbx
+*.ovpn
+secrets/
+deploy/secrets/
 
-# Jangan publikasikan dokumen kerja Markdown; README tetap boleh masuk Git.
+# Database, backup, dan hasil ekspor
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
+*.sql
+*.csv
+*.tsv
+*.pdf
+*.xlsx
+*.xls
+exports/
+downloads/
+uploads/
+evidence/
+
+# Model, data biometrik, dan tooling lokal
+backend/data/
+backend/models/
+backend/openapi.local.json
+.tools/
+
+# Dokumen kerja/perencanaan; hanya README root yang dipublikasikan
+docs/
+prompts/
+references/
+AGENTS.md
 *.md
 !/README.md
+
+# IDE, sistem operasi, dan arsip lokal
+.idea/
+.vscode/
+.history/
+*.code-workspace
+.terraform/
+*.tfstate
+*.tfstate.*
+docker-compose.override.yml
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.zip
+*.7z
+*.tar
+*.tar.gz

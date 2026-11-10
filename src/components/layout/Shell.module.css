@@ -49,9 +49,52 @@
   gap: var(--space-3);
 }
 
+.adminHeaderControls,
+.adminNavigation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.adminHeaderControls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.adminNavigation a {
+  display: inline-flex;
+  min-height: var(--target-size);
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-surface);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.adminNavigation a:hover,
+.adminNavigation a:focus-visible,
+.adminNavigation .adminNavActive {
+  border-color: var(--color-surface);
+  background: var(--color-primary);
+}
+
 .adminActions {
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.logoutButton {
+  min-width: 5.5rem;
+  border-color: var(--color-surface);
+  color: var(--color-surface);
+  background: transparent;
+}
+
+.logoutButton:hover:not(:disabled) {
+  color: var(--color-ink);
+  background: var(--color-surface);
 }
 
 .brandLogo {
@@ -69,6 +112,21 @@
   font-weight: 800;
 }
 
+.previewBadge {
+  position: fixed;
+  z-index: 10;
+  right: var(--space-2);
+  top: calc(var(--header-height) + var(--space-1));
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  color: var(--color-surface);
+  background: rgb(17 17 17 / 72%);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
 @media (max-width: 40rem) {
   .adminHeaderInner {
     align-items: flex-start;
@@ -80,7 +138,26 @@
     justify-content: stretch;
   }
 
+  .adminHeaderControls,
+  .adminNavigation {
+    width: 100%;
+  }
+
+  .adminHeaderControls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adminNavigation a {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
   .adminActions > * {
     flex: 1 1 auto;
+  }
+
+  .logoutButton {
+    width: 100%;
   }
 }

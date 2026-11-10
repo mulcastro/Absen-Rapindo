@@ -1,76 +1,94 @@
-import { useMemo, useState } from 'react';
-import { useLocation } from 'react-router';
-
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { AdminShell } from '../components/layout/AdminShell';
-import { Badge, type BadgeTone } from '../components/ui/Badge';
+import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import {
   EmptyState,
   ErrorNotice,
   LoadingState,
 } from '../components/ui/Feedback';
-import type { RecapStatus } from '../features/visual-demo/types';
-import {
-  getVisualState,
-  useVisualDemo,
-} from '../features/visual-demo/useVisualDemo';
+import { summarizeRoster } from '../features/admin/adminModel';
+import { loadAdminService, type SessionRecap } from '../services/admin';
 import styles from './ReferenceScreens.module.css';
 
-const STATUS_LABELS: Record<RecapStatus, string> = {
-  hadir: 'Hadir',
-  terlambat: 'Terlambat',
-  gagal: 'Gagal',
-  belum: 'Belum',
-};
-
-const STATUS_TONES: Record<RecapStatus, BadgeTone> = {
-  hadir: 'success',
-  terlambat: 'warning',
-  gagal: 'failure',
-  belum: 'neutral',
-};
-
 export function AdminRecapPage() {
-  const location = useLocation();
-  const demo = useVisualDemo();
-  const visualState = getVisualState(location.search);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const isReady = visualState === 'data' && demo.status === 'ready';
+  const { sessionId = '' } = useParams();
+  const [recap, setRecap] = useState<SessionRecap | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const busyRef = useRef(false);
 
-  const summary = useMemo(() => {
-    if (demo.status !== 'ready') {
-      return null;
-    }
-    const accepted = demo.data.recap.filter(
-      (row) => row.status === 'hadir' || row.status === 'terlambat',
-    ).length;
-    return {
-      roster: demo.data.recap.length,
-      accepted,
-      late: demo.data.recap.filter((row) => row.status === 'terlambat').length,
-      notMarked: demo.data.recap.length - accepted,
-      failedAttempts: demo.data.recap.filter((row) => row.status === 'gagal')
-        .length,
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void loadAdminService()
+      .then((service) => service.getRecap(sessionId))
+      .then((data) => {
+        if (active) setRecap(data);
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : 'Rekap tidak dapat dimuat.',
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
     };
-  }, [demo]);
+  }, [sessionId]);
 
+  const summary = useMemo(
+    () => (recap ? summarizeRoster(recap.roster) : null),
+    [recap],
+  );
+  const requestExport = async (format: 'xlsx' | 'pdf') => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setFeedback(null);
+    try {
+      const service = await loadAdminService();
+      await service.requestExport(sessionId, format);
+      setFeedback({
+        tone: 'success',
+        message: `Daftar hadir ${format === 'xlsx' ? 'Excel' : 'PDF'} berhasil diunduh.`,
+      });
+    } catch (reason) {
+      setFeedback({
+        tone: 'error',
+        message:
+          reason instanceof Error
+            ? reason.message
+            : 'Ekspor gagal. Tidak ada berkas yang dibuat.',
+      });
+    } finally {
+      busyRef.current = false;
+    }
+  };
   const actions = (
     <>
       <Button
-        onClick={() =>
-          setFeedback('Form sesi belum terhubung. Tidak ada sesi yang dibuat.')
-        }
+        variant="outline"
+        className={styles.adminOutlineButton}
+        onClick={() => void requestExport('xlsx')}
       >
-        Buka sesi baru
+        Ekspor Excel
       </Button>
       <Button
         variant="outline"
         className={styles.adminOutlineButton}
-        onClick={() =>
-          setFeedback('Ekspor belum terhubung. Tidak ada berkas yang dibuat.')
-        }
+        onClick={() => void requestExport('pdf')}
       >
-        Ekspor Excel
+        Ekspor PDF
       </Button>
     </>
   );
@@ -78,26 +96,32 @@ export function AdminRecapPage() {
   return (
     <AdminShell actions={actions}>
       <main className={styles.adminPage}>
-        <div className={styles.simulationBanner} role="status">
-          Mode simulasi — data tidak dikirim ke server
-        </div>
-        {(visualState === 'loading' || demo.status === 'loading') && (
-          <LoadingState title="Memuat rekap sesi" />
-        )}
-        {visualState === 'error' && (
+        {loading && <LoadingState title="Memuat rekap sesi" />}
+        {error && (
           <ErrorNotice title="Rekap tidak dapat dimuat">
-            <p>Ini state gagal simulasi. Coba lagi setelah layanan tersedia.</p>
+            <p>{error}</p>
           </ErrorNotice>
         )}
-        {(visualState === 'empty' || demo.status === 'unavailable') && (
+        {recap?.stale && (
+          <ErrorNotice title="Rekap mungkin sudah berubah">
+            <p>Muat ulang data sebelum mengambil keputusan operasional.</p>
+          </ErrorNotice>
+        )}
+        {recap && recap.roster.length === 0 && (
           <EmptyState
             title="Belum ada data rekap"
-            description="Data peserta akan tampil setelah tersedia dari server."
+            description="Roster sesi belum berisi peserta."
           />
         )}
-        {isReady && summary && (
+        {recap && recap.roster.length > 0 && summary && (
           <>
-            <h1>{demo.data.session.title}</h1>
+            <Link className={styles.backLink} to="/admin/sesi">
+              ← Kembali ke daftar sesi
+            </Link>
+            <div className={styles.adminTitle}>
+              <p>REKAP KEHADIRAN</p>
+              <h1>{recap.session.title}</h1>
+            </div>
             <section
               className={styles.summaryGrid}
               aria-label="Ringkasan kehadiran"
@@ -122,13 +146,18 @@ export function AdminRecapPage() {
             </section>
             <p className={styles.failedAttemptSummary}>
               Percobaan gagal terakhir:{' '}
-              <strong>{summary.failedAttempts}</strong> — tidak dihitung sebagai
-              hadir.
+              <strong>{summary.failedAttempts}</strong> — dicatat terpisah dan
+              tidak dihitung sebagai hadir.
             </p>
-            {feedback && (
-              <ErrorNotice title="Fitur belum terhubung">
-                <p>{feedback}</p>
+            {feedback?.tone === 'error' && (
+              <ErrorNotice title="Informasi ekspor">
+                <p>{feedback.message}</p>
               </ErrorNotice>
+            )}
+            {feedback?.tone === 'success' && (
+              <p className={styles.exportSuccess} role="status">
+                {feedback.message}
+              </p>
             )}
             <div
               className={styles.tableRegion}
@@ -140,24 +169,40 @@ export function AdminRecapPage() {
                 <thead>
                   <tr>
                     <th scope="col">Peserta</th>
-                    <th scope="col">Status</th>
+                    <th scope="col">Kehadiran sah</th>
                     <th scope="col">Waktu</th>
                     <th scope="col">Lokasi</th>
-                    <th scope="col">Alasan gagal</th>
+                    <th scope="col">Percobaan gagal terakhir</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {demo.data.recap.map((row) => (
-                    <tr key={row.id}>
+                  {recap.roster.map((row) => (
+                    <tr key={row.participantId}>
                       <th scope="row">{row.participantName}</th>
                       <td>
-                        <Badge tone={STATUS_TONES[row.status]}>
-                          {STATUS_LABELS[row.status]}
-                        </Badge>
+                        {row.attendance ? (
+                          <Badge
+                            tone={
+                              row.attendance.status === 'terlambat'
+                                ? 'warning'
+                                : 'success'
+                            }
+                          >
+                            {row.attendance.status === 'terlambat'
+                              ? 'Terlambat'
+                              : 'Hadir'}
+                          </Badge>
+                        ) : (
+                          <Badge tone="neutral">Belum</Badge>
+                        )}
                       </td>
-                      <td>{row.markedAt ?? '—'}</td>
-                      <td>{row.location ?? '—'}</td>
-                      <td>{row.failureReason ?? '—'}</td>
+                      <td>{row.attendance?.markedAt ?? '—'}</td>
+                      <td>{row.attendance?.location ?? '—'}</td>
+                      <td>
+                        {row.latestFailedAttempt
+                          ? `${row.latestFailedAttempt.occurredAt} — ${row.latestFailedAttempt.reason}`
+                          : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

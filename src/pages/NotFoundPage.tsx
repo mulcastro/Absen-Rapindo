@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 
 import { ParticipantShell } from '../components/layout/ParticipantShell';
-import styles from './DevelopmentPage.module.css';
+import styles from './GeneralPages.module.css';
 
 export function NotFoundPage() {
   return (

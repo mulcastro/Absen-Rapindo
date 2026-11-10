@@ -8,9 +8,17 @@ import {
   ErrorNotice,
   LoadingState,
 } from '../components/ui/Feedback';
-import { appConfig } from '../config/appConfig';
 import { useAttendanceResult } from '../features/attendance/useAttendanceResult';
 import styles from './ReferenceScreens.module.css';
+
+function formatAttendanceTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('id-ID', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
 
 export function ResultPage() {
   const navigate = useNavigate();
@@ -21,37 +29,43 @@ export function ResultPage() {
     confirmed && confirmed.outcome !== 'rejected' ? confirmed.attendance : null;
 
   return (
-    <ParticipantShell title="Absen">
+    <ParticipantShell title="Hasil absensi">
       <main className={styles.resultPage}>
         <div className={styles.resultContent}>
           {state.status === 'loading' && (
             <LoadingState title="Memuat hasil absensi" />
           )}
           {(state.status === 'unknown' || state.status === 'unavailable') && (
-            <ErrorNotice title="Hasil belum dapat dipastikan">
-              <p>{state.message}</p>
-            </ErrorNotice>
+            <div className={styles.resultState}>
+              <ErrorNotice title="Hasil belum dapat dipastikan">
+                <p>{state.message}</p>
+              </ErrorNotice>
+              <Button onClick={state.refresh}>Periksa kembali</Button>
+              <Button variant="outline" onClick={() => void navigate('/')}>
+                Kembali ke daftar sesi
+              </Button>
+            </div>
           )}
           {confirmed?.outcome === 'rejected' && (
             <EmptyState
               title="Absensi belum berhasil"
               description={confirmed.message}
+              action={
+                <Button onClick={() => void navigate('/')}>
+                  Kembali ke daftar sesi
+                </Button>
+              }
             />
           )}
           {attendance && (
             <>
-              {appConfig.dataSource === 'mock' && (
-                <p className={styles.participantSimulation} role="status">
-                  Mode simulasi — data tidak dikirim ke server
-                </p>
-              )}
               <div className={styles.successMark} aria-hidden="true">
                 <span />
               </div>
               <h1>
                 {confirmed?.outcome === 'already_recorded'
                   ? 'Sudah tercatat'
-                  : 'Absen berhasil'}
+                  : 'Absensi berhasil'}
               </h1>
               <section
                 className={styles.resultCard}
@@ -63,13 +77,13 @@ export function ResultPage() {
                     <dd>{attendance.participantName}</dd>
                   </div>
                   <div>
-                    <dt>ID sesi</dt>
-                    <dd>{attendance.sessionId}</dd>
+                    <dt>Sesi</dt>
+                    <dd>{attendance.sessionTitle ?? attendance.sessionId}</dd>
                   </div>
                   <div>
-                    <dt>Waktu server</dt>
+                    <dt>Waktu absensi</dt>
                     <dd className={styles.resultTime}>
-                      {attendance.markedAt}{' '}
+                      {formatAttendanceTime(attendance.markedAt)}{' '}
                       <Badge
                         tone={
                           attendance.status === 'hadir' ? 'success' : 'warning'

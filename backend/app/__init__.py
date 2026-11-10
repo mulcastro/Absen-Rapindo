@@ -1,0 +1,1 @@
+"""Backend Absensi LPK Rapindo."""

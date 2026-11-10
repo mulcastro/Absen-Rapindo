@@ -1,68 +1,113 @@
-# Aplikasi Absensi Wajah LPK Rapindo
+# Absensi Wajah LPK Rapindo
 
-Paket acuan pembangunan aplikasi produksi, bukan aplikasi yang sudah diimplementasikan.
-Target awal: 35 peserta pelatihan selama 6 hari. Frontend dikerjakan lebih dahulu;
-sistem akhir mencakup backend, verifikasi wajah, enrollment, administrasi, dan operasional.
+Aplikasi absensi wajah berbasis web untuk enrollment peserta, verifikasi kehadiran,
+pengelolaan sesi, rekap, ekspor Excel/PDF, dan audit aktivitas.
 
-## Mulai di Codex desktop
-1. Ekstrak paket dan buka folder `absensi-rapindo` sebagai folder proyek.
-2. Baca `AGENTS.md` dan `docs/INDEX.md`.
-3. Salin isi `prompts/00-prompt-pembuka.md` ke percakapan Codex.
-4. Jalankan prompt bernomor sesuai tahap; satu tahap per tugas, tinjau hasil dan pengujiannya.
-5. Jangan meminta semua tahap sekaligus. Simpan perubahan ke Git secara bertahap.
+## Teknologi
 
-Fondasi frontend, `package.json`, dan dependency lockfile sudah tersedia. Backend, image Docker,
-dan deployment nyata belum dibuat.
-Paket tidak menyertakan data biometrik, kredensial, model pretrained, atau PoC yang belum diberikan.
+- Frontend: React, TypeScript strict, Vite, React Router, CSS Modules, dan PWA.
+- Backend: FastAPI, SQLAlchemy, Alembic, PostgreSQL, YuNet, SFace, dan Silent-Face.
+- Pengujian: Vitest, Testing Library, Playwright, Pytest, dan Ruff.
 
-## Menjalankan fondasi frontend
+## Persyaratan lokal
 
-Fondasi frontend memerlukan Node.js `>=20.18.0 <21` atau `>=22.12.0` dan npm. Versi yang
-dipakai saat scaffolding adalah Node.js 20.18.0 dan npm 10.9.0. Di PowerShell:
+- Node.js `>=20.18.0 <21` atau `>=22.12.0` dan npm.
+- Python `>=3.12,<3.13`.
+- PostgreSQL dengan database development dan database test terpisah.
+- Model biometrik sesuai checksum pada `backend/model-manifest.json`. Bobot model tidak
+  disimpan di Git.
+
+## Menjalankan frontend
 
 ```powershell
 npm ci
+Copy-Item .env.example .env.development.local
 npm run dev
 ```
 
-Salin `.env.example` menjadi `.env.development.local` hanya bila perlu mengubah konfigurasi
-publik lokal. `VITE_DATA_SOURCE=mock` hanya boleh untuk development/test dan selalu ditampilkan
-sebagai mode simulasi. Build production menolak nilai tersebut.
+Vite meneruskan `/api` ke backend lokal pada `http://127.0.0.1:8000`.
 
-Pemeriksaan lokal:
+## Menjalankan backend
+
+```powershell
+cd backend
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev,biometrics]"
+Copy-Item .env.example .env
+# Isi nilai rahasia dan koneksi database hanya di backend/.env.
+alembic upgrade head
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+`backend/.env` tidak boleh dimasukkan ke Git. Mode produksi menolak konfigurasi rahasia,
+consent, origin, payload limit, dan biometrik yang tidak lengkap.
+
+## Bootstrap admin dan TOTP
+
+```powershell
+cd backend
+$env:ADMIN_BOOTSTRAP_USERNAME = 'nama-admin'
+python -m app.bootstrap
+Remove-Item Env:ADMIN_BOOTSTRAP_USERNAME
+```
+
+Kata sandi diminta secara tersembunyi. Simpan secret/QR TOTP yang ditampilkan satu kali ke
+aplikasi autentikator. Untuk rotasi TOTP akun yang sudah ada:
+
+```powershell
+$env:ADMIN_TOTP_USERNAME = 'nama-admin'
+python -m app.provision_totp
+Remove-Item Env:ADMIN_TOTP_USERNAME
+```
+
+## Pemeriksaan frontend
 
 ```powershell
 npm run format:check
 npm run lint
 npm run typecheck
-npm test
+npm test -- --run
 npm run build
-npm run preview
 ```
 
-Dependency inti yang terkunci pada fondasi: React 19.3.1, React Router 7.18.5, Vite 6.4.5,
-TypeScript 5.9.3, Vitest 4.1.12, ESLint 9.39.5, dan Prettier 3.9.10. Vite terbaru tidak dipakai
-karena Node.js lokal 20.18.0 belum memenuhi minimum 20.19. Upgrade dependency mayor harus
-didahului review kompatibilitas dan pengujian.
+## Pemeriksaan backend
 
-Rujukan kompatibilitas: [panduan Vite](https://vite.dev/guide/),
-[panduan Vitest](https://vitest.dev/guide/), dan
-[instalasi declarative React Router](https://reactrouter.com/start/declarative/installation).
+Database test wajib PostgreSQL dan namanya harus berakhiran `_test`. Test akan membuat dan
+menghapus seluruh tabel pada database tersebut.
 
-## Susunan
-- `AGENTS.md`: aturan kerja agent dalam repository.
-- `docs/`: kebutuhan, arsitektur, desain, pengujian, keamanan, operasional, dan progres.
-- `references/originals/`: empat Markdown asli dan PDF arsitektur; arsip, jangan diedit.
-- `references/visual/`: empat gambar visual asli, nama dinormalisasi.
-- `prompts/`: prompt pembuka, implementasi frontend, integrasi, dan tahap sistem berikutnya.
-- `.env.example`: contoh konfigurasi publik frontend, tanpa rahasia.
+```powershell
+cd backend
+$env:TEST_DATABASE_URL = 'postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/absensi_test'
+.\.venv\Scripts\python.exe -m ruff check app tests
+.\.venv\Scripts\python.exe -m pytest -q
+Remove-Item Env:TEST_DATABASE_URL
+```
 
-## Struktur kode saat implementasi
-Kode frontend tetap di root: `src/`, `public/`, `tests/`, konfigurasi Vite dan TypeScript.
-Backend kelak di `backend/`; deployment di `deploy/`. Satu repo tanpa workspace/monorepo tooling.
-Lihat `docs/architecture/frontend.md` untuk struktur rincinya.
+## Retensi bukti
 
-## Batas kesiapan
-Mock hanya untuk development/test dan ditandai jelas. Tidak ada fallback mock di produksi.
-Production belum siap sampai G1, G2, kontrak API, keamanan, uji perangkat, restore backup,
-pilot, dan keputusan operasional selesai. Checklist belum dicentang karena belum ada implementasi.
+Pemeriksaan jumlah bukti kedaluwarsa berjalan tanpa penghapusan secara default:
+
+```powershell
+cd backend
+python -m app.purge_retention
+$env:PURGE_CONFIRM = 'DELETE_EXPIRED_EVIDENCE'
+python -m app.purge_retention
+Remove-Item Env:PURGE_CONFIRM
+```
+
+Jalankan penghapusan hanya setelah kebijakan retensi dan backup diverifikasi.
+
+## Batas keamanan repository
+
+- Jangan commit `.env`, kredensial, private key, dump database, log, bukti wajah, model,
+  hasil ekspor, atau data peserta.
+- Folder `backend/models` dan `backend/data` hanya lokal/deployment.
+- Frontend selalu menggunakan API; fixture sintetis hanya berada di test.
+- Foto/frame tidak disimpan di browser dan API privat menggunakan `Cache-Control: no-store`.
+
+## Deployment
+
+Target produksi menggunakan HTTPS, PostgreSQL, backend FastAPI, serta frontend statis dalam
+satu origin. Siapkan secret produksi, model terverifikasi, migrasi, backup/restore, monitoring,
+dan uji staging HP sebelum membuka akses produksi.
