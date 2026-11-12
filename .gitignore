@@ -17,6 +17,9 @@ htmlcov/
 playwright-report/
 test-results/
 *.log
+.run/
+start-rapindo.ps1
+stop-rapindo.ps1
 
 # Rahasia dan konfigurasi lokal
 .env

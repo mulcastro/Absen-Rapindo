@@ -4,16 +4,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 from io import BytesIO
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .models import Attendance, Participant, TrainingSession
 
@@ -147,62 +148,123 @@ def build_pdf(session: TrainingSession, rows: list[ExportRow]) -> bytes:
     output = BytesIO()
     document = SimpleDocTemplate(
         output,
-        pagesize=landscape(A4),
-        rightMargin=12 * mm,
-        leftMargin=12 * mm,
+        pagesize=A4,
+        rightMargin=15 * mm,
+        leftMargin=15 * mm,
         topMargin=12 * mm,
-        bottomMargin=12 * mm,
+        bottomMargin=19 * mm,
         title=f"Daftar Hadir - {session.title}",
         author="LPK Rapindo",
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
-        "ReportTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19
+        "ReportTitle",
+        parent=styles["Title"],
+        alignment=TA_CENTER,
+        fontName="Helvetica-Bold",
+        fontSize=16,
+        leading=19,
     )
     subtitle_style = ParagraphStyle(
         "ReportSubtitle", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10, leading=12
     )
     metadata_style = ParagraphStyle(
-        "ReportMetadata", parent=styles["Normal"], fontSize=9, leading=13
+        "ReportMetadata", parent=styles["Normal"], fontSize=8.5, leading=11
     )
     footer_style = ParagraphStyle(
-        "ReportFooter", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9, leading=12
+        "ReportFooter", parent=styles["Normal"], alignment=TA_RIGHT, fontSize=9, leading=12
     )
-    generated_at = session.starts_at.astimezone(
-        ZoneInfo(session.timezone)
-    ).year
-    story = [
-        Paragraph("DAFTAR HADIR PESERTA", title_style),
-        Paragraph("Attendance Record", subtitle_style),
-        Spacer(1, 5 * mm),
-    ]
-    metadata = [
+
+    def draw_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#B7B7B7"))
+        canvas.setLineWidth(0.35)
+        canvas.line(doc.leftMargin, 13 * mm, A4[0] - doc.rightMargin, 13 * mm)
+        canvas.setFillColor(colors.HexColor("#667085"))
+        canvas.setFont("Helvetica", 7)
+        canvas.drawString(
+            doc.leftMargin,
+            8 * mm,
+            "Dihasilkan otomatis oleh Aplikasi Absensi LPK Rapindo  |  "
+            f"Kode dokumen: ABS/{session.starts_at.year}/"
+            f"{session.starts_at.month:02d}/{session.id[:4].upper()}",
+        )
+        canvas.drawRightString(A4[0] - doc.rightMargin, 8 * mm, f"Halaman {doc.page}")
+        canvas.restoreState()
+
+    logo_path = Path(__file__).resolve().parents[2] / "public" / "logo-lpk-rapindo-1024.png"
+    logo = Image(str(logo_path), width=34 * mm, height=24 * mm) if logo_path.exists() else ""
+    header = Table(
         [
-            Paragraph(f"<b>Nama Sesi</b><br/>: {escape(session.title)}", metadata_style),
-            Paragraph(f"<b>Waktu</b><br/>: {escape(_time_range(session))}", metadata_style),
+            [
+                Paragraph(
+                    "<font size=17><b>LPK RAPINDO</b></font><br/>"
+                    "Jl. Moh. Taher No. 169-170, Desa Cot Mesjid, "
+                    "Kecamatan Lueng Bata Kota Banda Aceh<br/>"
+                    "E-mail           : www.rapyrapindo@gmail.com<br/>"
+                    "Contact Person   : 0651 - 8083763 / 0821 64833402",
+                    ParagraphStyle(
+                        "ReportHeader",
+                        parent=styles["Normal"],
+                        fontSize=8.5,
+                        leading=11,
+                    ),
+                ),
+                logo,
+            ]
         ],
-        [
-            Paragraph(
-                f"<b>Hari / Tanggal</b><br/>: "
-                f"{escape(_indonesian_date(session.starts_at, session.timezone))}",
-                metadata_style,
-            ),
-            Paragraph("<b>Tempat</b><br/>: ", metadata_style),
-        ],
-        [
-            Paragraph(f"<b>Jumlah Peserta</b><br/>: {len(rows)} orang", metadata_style),
-            Paragraph("<b>Narasumber</b><br/>: ", metadata_style),
-        ],
-    ]
-    metadata_table = Table(metadata, colWidths=[125 * mm, 125 * mm])
-    metadata_table.setStyle(
+        colWidths=[145 * mm, 35 * mm],
+    )
+    header.setStyle(
         TableStyle(
             [
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 1),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LINEBELOW", (0, 0), (-1, -1), 2, colors.HexColor("#4472C4")),
+            ]
+        )
+    )
+    generated_at = session.starts_at.astimezone(ZoneInfo(session.timezone)).year
+    story = [
+        header,
+        Spacer(1, 7 * mm),
+        Paragraph("DAFTAR HADIR PESERTA", title_style),
+        Paragraph("Attendance Record", subtitle_style),
+        Spacer(1, 4 * mm),
+    ]
+    metadata = [
+        [
+            Paragraph(f"<b>Nama Sesi</b>      : {escape(session.title)}", metadata_style),
+            Paragraph(f"<b>Waktu</b>           : {escape(_time_range(session))}", metadata_style),
+        ],
+        [
+            Paragraph(
+                f"<b>Hari / Tanggal</b> : "
+                f"{escape(_indonesian_date(session.starts_at, session.timezone))}",
+                metadata_style,
+            ),
+            Paragraph("<b>Tempat</b>          : ..............................", metadata_style),
+        ],
+        [
+            Paragraph(f"<b>Jumlah Peserta</b>  : {len(rows)} orang", metadata_style),
+            Paragraph("<b>Narasumber</b>       : ..............................", metadata_style),
+        ],
+    ]
+    metadata_table = Table(metadata, colWidths=[90 * mm, 90 * mm])
+    metadata_table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+                ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor("#C00000")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
         )
     )
@@ -224,7 +286,7 @@ def build_pdf(session: TrainingSession, rows: list[ExportRow]) -> bytes:
     table = Table(
         data,
         repeatRows=1,
-        colWidths=[12 * mm, 30 * mm, 65 * mm, 32 * mm, 45 * mm, 45 * mm],
+        colWidths=[11 * mm, 26 * mm, 53 * mm, 29 * mm, 34 * mm, 27 * mm],
     )
     table.setStyle(
         TableStyle(
@@ -233,18 +295,20 @@ def build_pdf(session: TrainingSession, rows: list[ExportRow]) -> bytes:
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#777777")),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#B7B7B7")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F3F3F3")]),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("ALIGN", (0, 0), (1, -1), "CENTER"),
+                ("ALIGN", (3, 0), (-1, -1), "CENTER"),
             ]
         )
     )
     story.extend(
         [
             table,
-            Spacer(1, 5 * mm),
+            Spacer(1, 4 * mm),
             Paragraph(
                 "Keterangan: Status kehadiran, waktu hadir, dan lokasi terisi otomatis "
                 "oleh aplikasi saat peserta melakukan absen.",
@@ -264,5 +328,5 @@ def build_pdf(session: TrainingSession, rows: list[ExportRow]) -> bytes:
             ),
         ]
     )
-    document.build(story)
+    document.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     return output.getvalue()
