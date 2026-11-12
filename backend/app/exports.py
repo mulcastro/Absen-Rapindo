@@ -42,6 +42,39 @@ def _spreadsheet_text(value: str) -> str:
     return f"'{value}" if value.startswith(("=", "+", "-", "@")) else value
 
 
+def _indonesian_date(value: datetime, timezone: str) -> str:
+    weekdays = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
+    months = (
+        "Januari",
+        "Februari",
+        "Maret",
+        "April",
+        "Mei",
+        "Juni",
+        "Juli",
+        "Agustus",
+        "September",
+        "Oktober",
+        "November",
+        "Desember",
+    )
+    try:
+        target_timezone = ZoneInfo(timezone)
+    except ZoneInfoNotFoundError:
+        target_timezone = ZoneInfo("UTC")
+    local_value = value.astimezone(target_timezone)
+    return (
+        f"{weekdays[local_value.weekday()]}, {local_value.day} "
+        f"{months[local_value.month - 1]} {local_value.year}"
+    )
+
+
+def _time_range(session: TrainingSession) -> str:
+    start = _local_time(session.starts_at, session.timezone)
+    end = _local_time(session.ends_at, session.timezone)
+    return f"{start[-5:]} - {end[-5:]} WIB"
+
+
 def export_rows(
     session: TrainingSession,
     participants: list[Participant],
@@ -126,17 +159,55 @@ def build_pdf(session: TrainingSession, rows: list[ExportRow]) -> bytes:
     title_style = ParagraphStyle(
         "ReportTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19
     )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle", parent=styles["Normal"], alignment=TA_CENTER, fontSize=10, leading=12
+    )
+    metadata_style = ParagraphStyle(
+        "ReportMetadata", parent=styles["Normal"], fontSize=9, leading=13
+    )
+    footer_style = ParagraphStyle(
+        "ReportFooter", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9, leading=12
+    )
+    generated_at = session.starts_at.astimezone(
+        ZoneInfo(session.timezone)
+    ).year
     story = [
         Paragraph("DAFTAR HADIR PESERTA", title_style),
-        Paragraph(f"<b>Sesi:</b> {escape(session.title)}", styles["Normal"]),
-        Paragraph(
-            f"<b>Jadwal:</b> {escape(_local_time(session.starts_at, session.timezone))} - "
-            f"{escape(_local_time(session.ends_at, session.timezone))}",
-            styles["Normal"],
-        ),
-        Spacer(1, 6 * mm),
+        Paragraph("Attendance Record", subtitle_style),
+        Spacer(1, 5 * mm),
     ]
-    data = [["No.", "Kode", "Nama Peserta", "Status", "Waktu Kehadiran", "Lokasi"]]
+    metadata = [
+        [
+            Paragraph(f"<b>Nama Sesi</b><br/>: {escape(session.title)}", metadata_style),
+            Paragraph(f"<b>Waktu</b><br/>: {escape(_time_range(session))}", metadata_style),
+        ],
+        [
+            Paragraph(
+                f"<b>Hari / Tanggal</b><br/>: "
+                f"{escape(_indonesian_date(session.starts_at, session.timezone))}",
+                metadata_style,
+            ),
+            Paragraph("<b>Tempat</b><br/>: ", metadata_style),
+        ],
+        [
+            Paragraph(f"<b>Jumlah Peserta</b><br/>: {len(rows)} orang", metadata_style),
+            Paragraph("<b>Narasumber</b><br/>: ", metadata_style),
+        ],
+    ]
+    metadata_table = Table(metadata, colWidths=[125 * mm, 125 * mm])
+    metadata_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ]
+        )
+    )
+    story.extend([metadata_table, Spacer(1, 5 * mm)])
+    data = [["No.", "Kode", "Nama Peserta", "Status", "Waktu Hadir", "Lokasi"]]
     data.extend(
         [
             [
@@ -170,6 +241,28 @@ def build_pdf(session: TrainingSession, rows: list[ExportRow]) -> bytes:
             ]
         )
     )
-    story.append(table)
+    story.extend(
+        [
+            table,
+            Spacer(1, 5 * mm),
+            Paragraph(
+                "Keterangan: Status kehadiran, waktu hadir, dan lokasi terisi otomatis "
+                "oleh aplikasi saat peserta melakukan absen.",
+                ParagraphStyle(
+                    "ReportNote",
+                    parent=styles["Normal"],
+                    fontSize=8,
+                    leading=10,
+                ),
+            ),
+            Spacer(1, 8 * mm),
+            Paragraph(
+                f"Banda Aceh, ..... ................. {generated_at}<br/><br/>"
+                "LPK Rapindo<br/><br/><br/>"
+                "<b>Siswandi</b><br/>Ketua LPK",
+                footer_style,
+            ),
+        ]
+    )
     document.build(story)
     return output.getvalue()
