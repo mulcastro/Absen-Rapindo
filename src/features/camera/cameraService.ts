@@ -224,6 +224,7 @@ export async function captureBurst({
         elapsedMs: Math.round(now() - startedAt),
       });
       onProgress?.(frames.length);
+      config.onProgress?.(frames.length);
     } catch (error) {
       if (error instanceof CameraError) {
         throw error;

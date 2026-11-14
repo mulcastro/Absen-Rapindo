@@ -164,7 +164,8 @@
   margin-top: var(--space-4);
 }
 
-.errorNotice {
+.errorNotice,
+.successNotice {
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4);
@@ -173,12 +174,20 @@
   background: var(--color-error-soft);
 }
 
+.successNotice {
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
 .errorNotice h2,
-.errorNotice p {
+.errorNotice p,
+.successNotice h2,
+.successNotice p {
   margin: 0;
 }
 
-.errorNotice p {
+.errorNotice p,
+.successNotice p {
   margin-top: var(--space-1);
 }
 

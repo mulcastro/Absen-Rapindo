@@ -41,7 +41,8 @@ export function LoginPage({ role }: { role: 'participant' | 'admin' }) {
       setTotp('');
       const requested = (location.state as { returnTo?: unknown } | null)
         ?.returnTo;
-      const fallback = session.role === 'participant' ? '/' : '/admin/sesi';
+      const fallback =
+        session.role === 'participant' ? '/' : '/admin/pelatihan';
       void navigate(
         typeof requested === 'string' && requested.startsWith('/')
           ? requested

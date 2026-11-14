@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..dependencies import require_roles
 from ..exports import build_pdf, build_xlsx, export_rows
-from ..models import Attendance, AttendanceAttempt, Participant, Role, TrainingSession
+from ..models import (
+    Attendance,
+    AttendanceAttempt,
+    Participant,
+    Role,
+    SessionParticipant,
+    TrainingSession,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["recap"])
 
@@ -25,8 +32,13 @@ def recap(
     if not session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesi tidak ditemukan.")
     rows = []
+    participant_ids = select(SessionParticipant.participant_id).where(
+        SessionParticipant.session_id == session_id
+    )
     for participant in db.scalars(
-        select(Participant).where(Participant.active.is_(True)).order_by(Participant.name)
+        select(Participant)
+        .where(Participant.active.is_(True), Participant.id.in_(participant_ids))
+        .order_by(Participant.name)
     ):
         attendance = db.scalar(
             select(Attendance).where(
@@ -65,6 +77,8 @@ def recap(
     return {
         "session": {
             "id": session.id,
+            "training_id": session.training_id,
+            "day_id": session.day_id,
             "title": session.title,
             "starts_at": session.starts_at,
             "ends_at": session.ends_at,
@@ -98,8 +112,15 @@ def export_attendance(
     session = db.get(TrainingSession, session_id)
     if not session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesi tidak ditemukan.")
+    participant_ids = select(SessionParticipant.participant_id).where(
+        SessionParticipant.session_id == session_id
+    )
     participants = list(
-        db.scalars(select(Participant).where(Participant.active.is_(True)).order_by(Participant.name))
+        db.scalars(
+            select(Participant)
+            .where(Participant.active.is_(True), Participant.id.in_(participant_ids))
+            .order_by(Participant.name)
+        )
     )
     attendances = list(db.scalars(select(Attendance).where(Attendance.session_id == session_id)))
     rows = export_rows(session, participants, {item.participant_id: item for item in attendances})

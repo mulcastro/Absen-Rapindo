@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { ParticipantShell } from '../components/layout/ParticipantShell';
@@ -23,8 +23,10 @@ export function ActiveSessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadSessions = useCallback(() => {
     const controller = new AbortController();
+    setLoading(true);
+    setError(null);
     void loadAttendanceService()
       .then((service) => service.listActiveSessions(controller.signal))
       .then(setSessions)
@@ -40,6 +42,8 @@ export function ActiveSessionsPage() {
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, []);
+
+  useEffect(() => loadSessions(), [loadSessions]);
 
   return (
     <ParticipantShell title="Beranda">
@@ -67,6 +71,11 @@ export function ActiveSessionsPage() {
           <EmptyState
             title="Belum ada sesi yang dibuka"
             description="Silakan periksa kembali sesuai jadwal pelatihan atau hubungi pengelola."
+            action={
+              <Button variant="outline" onClick={loadSessions}>
+                Periksa kembali
+              </Button>
+            }
           />
         )}
         {sessions.map((session) => (

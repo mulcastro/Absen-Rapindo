@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     attendance_frame_count: int = 12
     attendance_duration_ms: int = 1500
     enrollment_frame_count: int = 16
-    enrollment_duration_ms: int = 4000
+    enrollment_duration_ms: int = 9000
     biometrics_mode: str = "disabled"
     candidate_detection_threshold: float | None = Field(default=None, ge=0, le=1)
     candidate_pad_threshold: float | None = Field(default=None, ge=0, le=1)

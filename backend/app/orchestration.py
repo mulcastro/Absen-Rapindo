@@ -23,6 +23,7 @@ from .models import (
     EnrollmentInvite,
     FaceTemplate,
     Participant,
+    SessionParticipant,
     SessionStatus,
     TrainingSession,
 )
@@ -223,6 +224,9 @@ def start_attendance(
         or current > training.ends_at
     ):
         raise DomainError("session_closed", "Sesi tidak sedang terbuka menurut waktu server.")
+    roster = db.get(SessionParticipant, (session_id, participant_id))
+    if not roster:
+        raise DomainError("not_on_roster", "Anda tidak terdaftar pada sesi ini.")
     attempts = db.scalar(
         select(func.count(AttendanceAttempt.id)).where(
             AttendanceAttempt.participant_id == participant_id,

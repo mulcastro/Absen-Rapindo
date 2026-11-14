@@ -2,12 +2,18 @@ import {
   AdminServiceError,
   type AdminService,
   type AdminSession,
+  type IssuedInvite,
+  type ParticipantSummary,
   type RosterRecapRow,
+  type TrainingDetail,
+  type TrainingSummary,
 } from '../../services/admin/types';
 
 const sessions: AdminSession[] = [
   {
     id: 'sesi-contoh',
+    trainingId: 'pelatihan-contoh',
+    dayId: null,
     title: 'Pelatihan K3 — Sesi Pagi',
     startsAt: '2026-11-10T08:00',
     endsAt: '2026-11-10T10:00',
@@ -17,6 +23,39 @@ const sessions: AdminSession[] = [
     geoRadiusMeters: null,
     geoAccuracyMeters: null,
     status: 'open',
+  },
+];
+
+const participants: ParticipantSummary[] = [
+  {
+    id: 'p-001',
+    code: 'P-001',
+    name: 'Ayu Pratama',
+    active: true,
+    faceEnrolled: true,
+  },
+  {
+    id: 'p-003',
+    code: 'P-003',
+    name: 'Citra Lestari',
+    active: true,
+    faceEnrolled: false,
+  },
+];
+
+const trainings: TrainingDetail[] = [
+  {
+    id: 'pelatihan-contoh',
+    title: 'Pelatihan K3',
+    heldOn: '2026-11-10',
+    timezone: 'Asia/Jakarta',
+    participantCount: 2,
+    enrolledCount: 1,
+    sessionCount: 1,
+    dayCount: 0,
+    days: [],
+    sessions: sessions,
+    participants,
   },
 ];
 
@@ -101,18 +140,136 @@ function findSession(id: string) {
   return session;
 }
 
+function findTraining(id: string) {
+  const training = trainings.find((item) => item.id === id);
+  if (!training)
+    throw new AdminServiceError('not-found', 'Pelatihan tidak ditemukan.');
+  return training;
+}
+
+function toSummary(item: TrainingDetail): TrainingSummary {
+  return {
+    id: item.id,
+    title: item.title,
+    heldOn: item.heldOn,
+    timezone: item.timezone,
+    participantCount: item.participants.length,
+    enrolledCount: item.participants.filter((row) => row.faceEnrolled).length,
+    sessionCount: item.sessions.length,
+    dayCount: item.days.length,
+  };
+}
+
 export function createMockAdminService(): AdminService {
   return {
+    listTrainings: () => Promise.resolve(trainings.map(toSummary)),
+    createTraining: (input) => {
+      const created: TrainingDetail = {
+        id: `pelatihan-${trainings.length + 1}`,
+        title: input.title,
+        heldOn: input.heldOn,
+        timezone: 'Asia/Jakarta',
+        participantCount: 0,
+        enrolledCount: 0,
+        sessionCount: 0,
+        dayCount: 0,
+        days: [],
+        sessions: [],
+        participants: [],
+      };
+      trainings.push(created);
+      return Promise.resolve({ ...created, sessions: [], participants: [] });
+    },
+    createTrainingDay: (trainingId, input) => {
+      const training = findTraining(trainingId);
+      const day = {
+        id: `hari-${training.days.length + 1}`,
+        trainingId,
+        dayNumber: training.days.length + 1,
+        label: input.label,
+        heldOn: input.heldOn,
+        sessions: [],
+      };
+      training.days = [...training.days, day];
+      return Promise.resolve(day);
+    },
+    getTraining: (id) => {
+      const training = findTraining(id);
+      return Promise.resolve({
+        ...toSummary(training),
+        days: training.days.map((day) => ({
+          ...day,
+          sessions: day.sessions.map((session) => ({ ...session })),
+        })),
+        sessions: training.sessions.map((session) => ({ ...session })),
+        participants: training.participants.map((item) => ({ ...item })),
+      });
+    },
+    importTrainingParticipants: (trainingId, rows) => {
+      const training = findTraining(trainingId);
+      for (const row of rows) {
+        if (
+          training.participants.some(
+            (item) => item.code === row.participantCode,
+          )
+        ) {
+          continue;
+        }
+        training.participants = [
+          ...training.participants,
+          {
+            id: `p-new-${training.participants.length}`,
+            code: row.participantCode,
+            name: row.participantName,
+            active: true,
+            faceEnrolled: false,
+          },
+        ];
+      }
+      return Promise.resolve({
+        accepted: rows.length,
+        created: rows.length,
+        attached: rows.length,
+      });
+    },
+    issueTrainingInvites: (trainingId) => {
+      const training = findTraining(trainingId);
+      const pending = training.participants.filter(
+        (item) => !item.faceEnrolled,
+      );
+      const invites: IssuedInvite[] = pending.map((item) => ({
+        participantId: item.id,
+        code: item.code,
+        name: item.name,
+        token: `token-${item.id}`,
+        expiresAt: '2026-11-17T00:00:00+07:00',
+      }));
+      return Promise.resolve({
+        issued: invites.length,
+        expiresAt: '2026-11-17T00:00:00+07:00',
+        invites,
+      });
+    },
     listSessions: () =>
       Promise.resolve(sessions.map((session) => ({ ...session }))),
     createSession: (input) => {
       const created: AdminSession = {
         ...input,
+        dayId: input.dayId ?? null,
         id: `sesi-simulasi-${sessions.length + 1}`,
         status: 'draft',
       };
       sessions.push(created);
+      const training = trainings.find((item) => item.id === input.trainingId);
+      if (training) {
+        training.sessions = [...training.sessions, created];
+      }
       return Promise.resolve({ ...created });
+    },
+    updateSession: (id, input) => {
+      const session = findSession(id);
+      Object.assign(session, input);
+      return Promise.resolve({ ...session });
     },
     openSession: (id) => {
       const session = findSession(id);
@@ -124,6 +281,8 @@ export function createMockAdminService(): AdminService {
       session.status = 'closed';
       return Promise.resolve({ ...session });
     },
+    listParticipants: () =>
+      Promise.resolve(participants.map((item) => ({ ...item }))),
     getRecap: (id) => {
       if (id === 'forbidden') {
         return Promise.reject(
@@ -140,7 +299,12 @@ export function createMockAdminService(): AdminService {
       });
     },
     importParticipants: (rows) => Promise.resolve({ accepted: rows.length }),
-    issueInvite: () => Promise.resolve({ status: 'issued' }),
+    issueInvite: () =>
+      Promise.resolve({
+        status: 'issued',
+        token: 'token-simulasi',
+        expiresAt: '2026-11-17T00:00:00+07:00',
+      }),
     requestExport: () => Promise.resolve(),
     listAudit: (offset = 0, limit = 25) => {
       const items = [

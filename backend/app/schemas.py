@@ -1,4 +1,6 @@
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -39,13 +41,35 @@ class ParticipantSummary(BaseModel):
     code: str
     name: str
     active: bool
+    face_enrolled: bool = False
+
+
+class TrainingCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    held_on: date
+    timezone: str = Field(default="Asia/Jakarta", min_length=1, max_length=64)
+
+
+class TrainingDayCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    held_on: date
+
+
+class TrainingDayView(BaseModel):
+    id: str
+    training_id: str
+    day_number: int
+    label: str
+    held_on: date
+    sessions: list[SessionView] = Field(default_factory=list)
 
 
 class InviteRequest(BaseModel):
     purpose: Literal["enroll", "reenroll"]
+    only_pending: bool = True
 
 
-class SessionCreate(BaseModel):
+class SessionConfig(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     starts_at: datetime
     ends_at: datetime
@@ -69,11 +93,49 @@ class SessionCreate(BaseModel):
         return self
 
 
-class SessionView(SessionCreate):
+class SessionCreate(SessionConfig):
+    training_id: str = Field(min_length=1, max_length=36)
+    day_id: str | None = Field(default=None, max_length=36)
+
+
+class SessionUpdate(SessionConfig):
+    pass
+
+
+class SessionView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    training_id: str | None = None
+    day_id: str | None = None
+    title: str
+    starts_at: datetime
+    ends_at: datetime
+    timezone: str
+    late_after_min: int
+    geo_required: bool
+    geo_latitude: float | None = None
+    geo_longitude: float | None = None
+    geo_radius_m: float | None = None
+    geo_accuracy_m: float | None = None
     status: SessionStatus
+
+
+class TrainingSummary(BaseModel):
+    id: str
+    title: str
+    held_on: date
+    timezone: str
+    participant_count: int
+    enrolled_count: int
+    session_count: int
+    day_count: int = 0
+
+
+class TrainingDetail(TrainingSummary):
+    days: list[TrainingDayView] = []
+    sessions: list[SessionView]
+    participants: list[ParticipantSummary]
 
 
 class AttendanceStart(BaseModel):

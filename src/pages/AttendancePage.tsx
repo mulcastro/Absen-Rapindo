@@ -206,27 +206,48 @@ export function AttendancePage() {
         )}
         {session.status === 'open' && (
           <>
+            <ol className={styles.guidanceList} aria-label="Langkah absensi">
+              <li>
+                <span aria-hidden="true">1</span>
+                {session.geoRequired ? ' Izinkan lokasi' : ' Siapkan kamera'}
+              </li>
+              <li>
+                <span aria-hidden="true">2</span> Posisikan wajah
+              </li>
+              <li>
+                <span aria-hidden="true">3</span> Kirim absensi
+              </li>
+            </ol>
             <section className={styles.locationStatus} aria-live="polite">
-              <h2>Akses lokasi diperlukan</h2>
-              {!session.geoRequired && (
-                <p>Sesi ini tidak memerlukan lokasi perangkat.</p>
+              {session.geoRequired ? (
+                <>
+                  <h2>Akses lokasi diperlukan</h2>
+                  {geo.state.status === 'idle' && (
+                    <p>Izinkan akses lokasi untuk melanjutkan absensi.</p>
+                  )}
+                  {geo.state.status === 'requesting' && (
+                    <p>Sedang mengambil lokasi…</p>
+                  )}
+                  {geo.state.status === 'captured' && (
+                    <p>
+                      Lokasi berhasil diambil dengan akurasi sekitar{' '}
+                      {Math.round(geo.state.capture.accuracy)} meter.
+                    </p>
+                  )}
+                  {geo.state.status === 'error' && (
+                    <p>{geo.state.error.message}</p>
+                  )}
+                  <p className={styles.locationDisclaimer}>
+                    Lokasi digunakan untuk memastikan Anda berada di area
+                    pelatihan.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2>Lokasi tidak diperlukan</h2>
+                  <p>Sesi ini tidak memerlukan akses lokasi perangkat.</p>
+                </>
               )}
-              {session.geoRequired && geo.state.status === 'idle' && (
-                <p>Izinkan akses lokasi untuk melanjutkan absensi.</p>
-              )}
-              {geo.state.status === 'requesting' && (
-                <p>Sedang mengambil lokasi…</p>
-              )}
-              {geo.state.status === 'captured' && (
-                <p>
-                  Lokasi berhasil diambil dengan akurasi sekitar{' '}
-                  {Math.round(geo.state.capture.accuracy)} meter.
-                </p>
-              )}
-              {geo.state.status === 'error' && <p>{geo.state.error.message}</p>}
-              <p className={styles.locationDisclaimer}>
-                Lokasi digunakan untuk memastikan Anda berada di area pelatihan.
-              </p>
             </section>
             <CameraPanel videoRef={camera.videoRef} state={camera.state} />
           </>
@@ -235,13 +256,7 @@ export function AttendancePage() {
           <>
             <ul className={styles.guidanceList} aria-label="Persiapan wajah">
               <li>
-                <span aria-hidden="true">✓</span> Pencahayaan baik
-              </li>
-              <li>
                 <span aria-hidden="true">✓</span> Wajah dalam bingkai
-              </li>
-              <li>
-                <span aria-hidden="true">✓</span> Tanpa masker
               </li>
             </ul>
           </>

@@ -25,6 +25,7 @@ export interface BurstConfig {
   frameCount: number;
   durationMs: number;
   jpegQuality: number;
+  onProgress?: (capturedCount: number) => void;
 }
 
 export interface CapturedFrame {

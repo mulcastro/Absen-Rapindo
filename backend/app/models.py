@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
     Enum,
     Float,
@@ -121,9 +122,38 @@ class FaceTemplate(Base):
     duplicate_fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
 
 
+class Training(Base):
+    __tablename__ = "trainings"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    title: Mapped[str] = mapped_column(String(200))
+    held_on: Mapped[date] = mapped_column(Date, index=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Jakarta")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TrainingParticipant(Base):
+    __tablename__ = "training_participants"
+    __table_args__ = (UniqueConstraint("training_id", "participant_id"),)
+    training_id: Mapped[str] = mapped_column(ForeignKey("trainings.id"), primary_key=True)
+    participant_id: Mapped[str] = mapped_column(ForeignKey("participants.id"), primary_key=True)
+
+
+class TrainingDay(Base):
+    __tablename__ = "training_days"
+    __table_args__ = (UniqueConstraint("training_id", "day_number"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    training_id: Mapped[str] = mapped_column(ForeignKey("trainings.id"), index=True)
+    day_number: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(100))
+    held_on: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class TrainingSession(Base):
     __tablename__ = "sessions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    training_id: Mapped[str | None] = mapped_column(ForeignKey("trainings.id"), index=True)
+    day_id: Mapped[str | None] = mapped_column(ForeignKey("training_days.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -135,6 +165,13 @@ class TrainingSession(Base):
     geo_radius_m: Mapped[float | None] = mapped_column(Float)
     geo_accuracy_m: Mapped[float | None] = mapped_column(Float)
     status: Mapped[SessionStatus] = mapped_column(Enum(SessionStatus), default=SessionStatus.draft)
+
+
+class SessionParticipant(Base):
+    __tablename__ = "session_participants"
+    __table_args__ = (UniqueConstraint("session_id", "participant_id"),)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), primary_key=True)
+    participant_id: Mapped[str] = mapped_column(ForeignKey("participants.id"), primary_key=True)
 
 
 class AttendanceAttempt(Base):

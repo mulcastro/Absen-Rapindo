@@ -21,6 +21,13 @@ test-results/
 start-rapindo.ps1
 stop-rapindo.ps1
 
+# Test lokal; tidak dipublikasikan ke GitHub
+e2e/
+e2e-live/
+**/tests/
+**/*.test.*
+**/*.spec.*
+
 # Rahasia dan konfigurasi lokal
 .env
 .env.*

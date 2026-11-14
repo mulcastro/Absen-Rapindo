@@ -93,7 +93,18 @@ async function request(
           'Percobaan absensi telah kedaluwarsa.',
           { status: response.status },
         );
-      throw mapStatus(response.status);
+      const detail =
+        typeof body === 'object' &&
+        body &&
+        'detail' in body &&
+        typeof body.detail === 'string'
+          ? body.detail
+          : null;
+      throw new ServiceError(
+        mapStatus(response.status).code,
+        detail ?? mapStatus(response.status).message,
+        { status: response.status },
+      );
     }
     return response;
   } catch (error) {

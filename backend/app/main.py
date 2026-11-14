@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from .config import get_settings
 from .hardening import PayloadLimitMiddleware, SecurityHeadersMiddleware
 from .rate_limit import InMemoryRateLimitMiddleware
-from .routes import admin, audit, auth, health, public, recap
+from .routes import admin, audit, auth, health, public, recap, trainings
 
 settings = get_settings()
 app = FastAPI(
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(trainings.router)
 app.include_router(public.router)
 app.include_router(recap.router)
 app.include_router(audit.router)

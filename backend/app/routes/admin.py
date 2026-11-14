@@ -2,7 +2,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,10 @@ from ..models import (
     EnrollmentInvite,
     Participant,
     Role,
+    SessionParticipant,
     SessionStatus,
+    Training,
+    TrainingDay,
     TrainingSession,
 )
 from ..schemas import (
@@ -22,9 +25,11 @@ from ..schemas import (
     ParticipantImport,
     ParticipantSummary,
     SessionCreate,
+    SessionUpdate,
     SessionView,
 )
 from ..security import digest
+from ..training_ops import copy_roster_to_session, participant_summaries
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -34,7 +39,8 @@ def list_participants(
     auth=Depends(require_roles(Role.admin, Role.instructor)), db: Session = Depends(get_db)
 ):
     del auth
-    return list(db.scalars(select(Participant).order_by(Participant.code)))
+    participants = list(db.scalars(select(Participant).order_by(Participant.code)))
+    return participant_summaries(db, participants)
 
 
 @router.post("/participants/import")
@@ -43,18 +49,31 @@ def import_participants(
 ):
     if auth.role != Role.admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Hanya admin dapat mengimpor peserta.")
+    codes = [row.code for row in payload.rows]
+    if len(codes) != len(set(codes)):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Kode peserta duplikat di dalam CSV; tidak ada data yang diubah.",
+        )
     try:
-        created = [Participant(code=row.code, name=row.name) for row in payload.rows]
-        db.add_all(created)
-        db.flush()
+        created = []
+        for row in payload.rows:
+            participant = db.scalar(select(Participant).where(Participant.code == row.code))
+            if not participant:
+                participant = Participant(code=row.code, name=row.name)
+                db.add(participant)
+                db.flush()
+                created.append(participant)
+            elif participant.name != row.name:
+                participant.name = row.name
         append_audit(
             db,
             actor_role=auth.role.value,
             actor_id=auth.subject_id,
             action="participants.import",
             target_type="participant_batch",
-            target_id=created[0].id,
-            payload={"accepted": len(created)},
+            target_id=created[0].id if created else "existing-participants",
+            payload={"accepted": len(payload.rows), "created": len(created)},
         )
         db.commit()
     except IntegrityError as exc:
@@ -62,7 +81,7 @@ def import_participants(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Kode peserta duplikat; impor dibatalkan seluruhnya."
         ) from exc
-    return {"accepted": len(created)}
+    return {"accepted": len(payload.rows), "created": len(created)}
 
 
 @router.post("/participants/{participant_id}/invite", status_code=201)
@@ -103,8 +122,60 @@ def create_session(
 ):
     if auth.role != Role.admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Hanya admin dapat membuat sesi.")
-    item = TrainingSession(**payload.model_dump(), status=SessionStatus.draft)
+    training = db.get(Training, payload.training_id)
+    if not training:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pelatihan tidak ditemukan.")
+    values = payload.model_dump()
+    day_id = values.pop("day_id", None)
+    if day_id is not None:
+        day = db.get(TrainingDay, day_id)
+        if not day or day.training_id != training.id:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Hari pelatihan tidak cocok.")
+    item = TrainingSession(**values, day_id=day_id, status=SessionStatus.draft)
     db.add(item)
+    db.flush()
+    copy_roster_to_session(db, training.id, item.id)
+    append_audit(
+        db,
+        actor_role=auth.role.value,
+        actor_id=auth.subject_id,
+        action="session.created",
+        target_type="session",
+        target_id=item.id,
+        payload={"training_id": training.id, "title": item.title},
+    )
+    db.commit()
+    return item
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionView)
+def update_session(
+    session_id: str,
+    payload: SessionUpdate,
+    auth=Depends(require_csrf),
+    db: Session = Depends(get_db),
+):
+    if auth.role != Role.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Hanya admin dapat mengubah sesi.")
+    item = db.get(TrainingSession, session_id)
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesi tidak ditemukan.")
+    if item.status != SessionStatus.draft:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Hanya sesi draf yang dapat diubah.",
+        )
+    for field, value in payload.model_dump().items():
+        setattr(item, field, value)
+    append_audit(
+        db,
+        actor_role=auth.role.value,
+        actor_id=auth.subject_id,
+        action="session.updated",
+        target_type="session",
+        target_id=item.id,
+        payload={"title": item.title},
+    )
     db.commit()
     return item
 
@@ -115,6 +186,16 @@ def change_session(session_id: str, target: SessionStatus, auth, db: Session):
     item = db.get(TrainingSession, session_id)
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesi tidak ditemukan.")
+    if target == SessionStatus.open and item.status != SessionStatus.draft:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Hanya sesi draf yang dapat dibuka.",
+        )
+    if target == SessionStatus.closed and item.status != SessionStatus.open:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Hanya sesi yang sedang terbuka yang dapat ditutup.",
+        )
     item.status = target
     db.commit()
     return item
@@ -122,6 +203,19 @@ def change_session(session_id: str, target: SessionStatus, auth, db: Session):
 
 @router.post("/sessions/{session_id}/open", response_model=SessionView)
 def open_session(session_id: str, auth=Depends(require_csrf), db: Session = Depends(get_db)):
+    item = db.get(TrainingSession, session_id)
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesi tidak ditemukan.")
+    roster_count = db.scalar(
+        select(func.count(SessionParticipant.participant_id)).where(
+            SessionParticipant.session_id == session_id
+        )
+    )
+    if not roster_count:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Sesi belum memiliki peserta. Impor peserta ke pelatihan terlebih dahulu.",
+        )
     return change_session(session_id, SessionStatus.open, auth, db)
 
 

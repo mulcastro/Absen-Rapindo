@@ -38,6 +38,7 @@ export function EnrollmentPage() {
   const [oldFaceFrames, setOldFaceFrames] = useState<readonly CapturedFrame[]>(
     [],
   );
+  const [captureProgress, setCaptureProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +53,7 @@ export function EnrollmentPage() {
     setPin('');
     setConfirmation('');
     setOldFaceFrames([]);
+    setCaptureProgress(0);
     setError(null);
     setLoading(true);
     void loadIdentityService()
@@ -106,15 +108,17 @@ export function EnrollmentPage() {
   const captureOldFace = async () => {
     if (!challenge) return;
     setError(null);
+    setCaptureProgress(0);
     setLoading(true);
     try {
       const frames = await camera.capture({
         frameCount: challenge.capture.frameCount,
         durationMs: challenge.capture.durationMs,
         jpegQuality: 0.86,
+        onProgress: setCaptureProgress,
       });
       setOldFaceFrames(frames);
-      resetCamera();
+      await camera.start();
       setStage('challenge');
     } catch (reason) {
       setError(
@@ -130,12 +134,14 @@ export function EnrollmentPage() {
   const captureAndSubmit = async () => {
     if (!invite || !challenge) return;
     setError(null);
+    setCaptureProgress(0);
     setLoading(true);
     try {
       const frames = await camera.capture({
         frameCount: challenge.capture.frameCount,
         durationMs: challenge.capture.durationMs,
         jpegQuality: 0.86,
+        onProgress: setCaptureProgress,
       });
       const service = await loadIdentityService();
       const enrollmentResult = await service.submitEnrollment({
@@ -167,6 +173,31 @@ export function EnrollmentPage() {
   };
 
   const unavailable = invite && invite.status !== 'valid';
+  const challengeStepIndex =
+    challenge && captureProgress > 0
+      ? Math.min(
+          Math.floor(
+            (captureProgress * challenge.orderedSteps.length) /
+              challenge.capture.frameCount,
+          ),
+          challenge.orderedSteps.length - 1,
+        )
+      : 0;
+  const challengeStep = challenge?.orderedSteps[challengeStepIndex];
+  const challengeInstruction =
+    camera.state.status === 'capturing' && challengeStep
+      ? `Sekarang: ${
+          challengeStep === 'lurus'
+            ? 'lihat lurus'
+            : challengeStep === 'kiri'
+              ? 'menoleh ke kiri'
+              : 'menoleh ke kanan'
+        } (${captureProgress}/${challenge.capture.frameCount})`
+      : camera.state.status === 'captured' && loading
+        ? 'Pengambilan selesai, sedang memproses…'
+        : stage === 'challenge' && camera.state.status === 'idle'
+          ? 'Aktifkan kamera untuk melanjutkan pendaftaran wajah'
+          : undefined;
   return (
     <ParticipantShell
       title="Pendaftaran peserta"
@@ -277,7 +308,11 @@ export function EnrollmentPage() {
               Posisikan wajah di dalam bingkai untuk memastikan identitas Anda
               sebelum memperbarui data.
             </p>
-            <CameraPanel videoRef={camera.videoRef} state={camera.state} />
+            <CameraPanel
+              videoRef={camera.videoRef}
+              state={camera.state}
+              instruction={challengeInstruction}
+            />
             <div className={styles.actions}>
               {camera.state.status !== 'ready' && (
                 <Button onClick={() => void camera.start()}>
@@ -302,7 +337,7 @@ export function EnrollmentPage() {
                 ? 'Langkah 4 dari 4'
                 : 'Langkah 3 dari 3'}
             </p>
-            <h1>Verifikasi wajah</h1>
+            <h1>Pendaftaran wajah</h1>
             {invite.purpose === 'reenroll' && (
               <p>
                 Identitas berhasil diperiksa. Sekarang daftarkan wajah terbaru.
@@ -327,7 +362,11 @@ export function EnrollmentPage() {
               Selesaikan langkah ini tanpa berpindah halaman agar proses tidak
               perlu diulang.
             </p>
-            <CameraPanel videoRef={camera.videoRef} state={camera.state} />
+            <CameraPanel
+              videoRef={camera.videoRef}
+              state={camera.state}
+              instruction={challengeInstruction}
+            />
             <div className={styles.actions}>
               {camera.state.status !== 'ready' && (
                 <Button onClick={() => void camera.start()}>
@@ -339,7 +378,7 @@ export function EnrollmentPage() {
                   loading={loading}
                   onClick={() => void captureAndSubmit()}
                 >
-                  Mulai verifikasi wajah
+                  Mulai pendaftaran wajah
                 </Button>
               )}
               <Button variant="outline" onClick={() => void navigate('/masuk')}>
@@ -374,8 +413,14 @@ export function EnrollmentPage() {
             </ErrorNotice>
           ))}
         {error && (
-          <ErrorNotice>
+          <ErrorNotice title="Pendaftaran belum berhasil">
             <p>{error}</p>
+            {(stage === 'old-face' || stage === 'challenge') && (
+              <p>
+                Pastikan wajah berada di tengah bingkai, lalu siapkan kamera
+                untuk mencoba kembali.
+              </p>
+            )}
           </ErrorNotice>
         )}
       </main>

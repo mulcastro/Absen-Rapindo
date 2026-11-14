@@ -19,6 +19,9 @@ const actionLabels: Record<string, string> = {
   'session.closed': 'Sesi ditutup',
   'participant.imported': 'Peserta diimpor',
   'participants.import': 'Peserta diimpor',
+  'training.created': 'Pelatihan dibuat',
+  'training.participants.imported': 'Peserta pelatihan diimpor',
+  'training.invites.issued': 'Undangan diterbitkan',
 };
 
 export function AdminAuditPage() {

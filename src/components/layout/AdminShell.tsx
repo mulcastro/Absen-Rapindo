@@ -41,20 +41,12 @@ export function AdminShell({ actions, children }: AdminShellProps) {
                 aria-label="Navigasi admin"
               >
                 <NavLink
-                  to="/admin/sesi"
+                  to="/admin/pelatihan"
                   className={({ isActive }) =>
                     isActive ? styles.adminNavActive : undefined
                   }
                 >
-                  Sesi
-                </NavLink>
-                <NavLink
-                  to="/admin/peserta"
-                  className={({ isActive }) =>
-                    isActive ? styles.adminNavActive : undefined
-                  }
-                >
-                  Peserta &amp; undangan
+                  Pelatihan
                 </NavLink>
                 <NavLink
                   to="/admin/audit"

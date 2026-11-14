@@ -43,6 +43,23 @@ export function LoadingState({
   );
 }
 
+export function SuccessNotice({
+  title = 'Berhasil',
+  children,
+}: ErrorNoticeProps) {
+  return (
+    <section className={styles.successNotice} role="status">
+      <span className={styles.noticeIcon} aria-hidden="true">
+        ✓
+      </span>
+      <div>
+        <h2>{title}</h2>
+        <div>{children}</div>
+      </div>
+    </section>
+  );
+}
+
 export function EmptyState({ title, description, action }: StateProps) {
   return (
     <section className={styles.state}>

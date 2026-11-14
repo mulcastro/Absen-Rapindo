@@ -130,6 +130,73 @@
   grid-column: 1 / -1;
 }
 
+.steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-ink);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.statsRow article {
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-ink);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.statsRow p,
+.statsRow strong {
+  margin: 0;
+}
+
+.statsRow p {
+  color: var(--color-muted);
+}
+
+.statsRow strong {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 1.5rem;
+}
+
+.inviteBox {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.inviteBox input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: var(--border-width) solid var(--color-ink);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .tableRegion {
   overflow-x: auto;
   border: var(--border-width) solid var(--color-ink);
@@ -161,7 +228,8 @@
   }
 
   .grid,
-  .formGrid {
+  .formGrid,
+  .statsRow {
     grid-template-columns: 1fr;
   }
 

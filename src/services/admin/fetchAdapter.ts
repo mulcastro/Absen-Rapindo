@@ -4,8 +4,13 @@ import {
   type AdminService,
   type AdminSession,
   type AuditEntry,
+  type IssuedInvite,
+  type ParticipantSummary,
   type RosterRecapRow,
   type SessionRecap,
+  type TrainingDetail,
+  type TrainingDay,
+  type TrainingSummary,
 } from './types';
 
 function object(value: unknown): Record<string, unknown> {
@@ -66,8 +71,11 @@ function parseSession(value: unknown): AdminSession {
       'Batas terlambat tidak valid.',
     );
   }
+  const trainingId = source.training_id;
   return {
     id: text(source, 'id'),
+    trainingId:
+      typeof trainingId === 'string' && trainingId ? trainingId : null,
     title: text(source, 'title'),
     startsAt: text(source, 'starts_at'),
     endsAt: text(source, 'ends_at'),
@@ -75,9 +83,87 @@ function parseSession(value: unknown): AdminSession {
     geoRequired,
     geoCenter:
       latitude === null || longitude === null ? null : { latitude, longitude },
+    dayId:
+      typeof source.day_id === 'string' && source.day_id ? source.day_id : null,
     geoRadiusMeters: nullableNumber(source, 'geo_radius_m'),
     geoAccuracyMeters: nullableNumber(source, 'geo_accuracy_m'),
     status: status as AdminSession['status'],
+  };
+}
+
+function parseParticipant(value: unknown): ParticipantSummary {
+  const source = object(value);
+  return {
+    id: text(source, 'id'),
+    code: text(source, 'code'),
+    name: text(source, 'name'),
+    active: source.active === true,
+    faceEnrolled: source.face_enrolled === true,
+  };
+}
+
+function integer(source: Record<string, unknown>, key: string): number {
+  const value = source[key];
+  if (!Number.isInteger(value)) {
+    throw new AdminServiceError(
+      'contract-unavailable',
+      `Field ${key} tidak valid.`,
+    );
+  }
+  return Number(value);
+}
+
+function parseTrainingSummary(value: unknown): TrainingSummary {
+  const source = object(value);
+  return {
+    id: text(source, 'id'),
+    title: text(source, 'title'),
+    heldOn: text(source, 'held_on'),
+    timezone: text(source, 'timezone'),
+    participantCount: integer(source, 'participant_count'),
+    enrolledCount: integer(source, 'enrolled_count'),
+    sessionCount: integer(source, 'session_count'),
+    dayCount: integer(source, 'day_count'),
+  };
+}
+
+function parseTrainingDetail(value: unknown): TrainingDetail {
+  const summary = parseTrainingSummary(value);
+  const source = object(value);
+  if (!Array.isArray(source.sessions) || !Array.isArray(source.participants)) {
+    throw new AdminServiceError(
+      'contract-unavailable',
+      'Detail pelatihan tidak valid.',
+    );
+  }
+  const rawDays = source.days;
+  if (!Array.isArray(rawDays)) {
+    throw new AdminServiceError(
+      'contract-unavailable',
+      'Hari pelatihan tidak valid.',
+    );
+  }
+  return {
+    ...summary,
+    days: rawDays.map((value): TrainingDay => {
+      const day = object(value);
+      if (!Array.isArray(day.sessions)) {
+        throw new AdminServiceError(
+          'contract-unavailable',
+          'Sesi hari pelatihan tidak valid.',
+        );
+      }
+      return {
+        id: text(day, 'id'),
+        trainingId: text(day, 'training_id'),
+        dayNumber: integer(day, 'day_number'),
+        label: text(day, 'label'),
+        heldOn: text(day, 'held_on'),
+        sessions: day.sessions.map(parseSession),
+      };
+    }),
+    sessions: source.sessions.map(parseSession),
+    participants: source.participants.map(parseParticipant),
   };
 }
 
@@ -169,6 +255,115 @@ export function createFetchAdminService(): AdminService {
     );
 
   return {
+    async listTrainings() {
+      const response = await checked(await request('/admin/trainings'));
+      const value = await readJson(response);
+      if (!Array.isArray(value)) {
+        throw new AdminServiceError(
+          'contract-unavailable',
+          'Daftar pelatihan tidak valid.',
+        );
+      }
+      return value.map(parseTrainingSummary);
+    },
+    async createTraining(input) {
+      const response = await mutation('/admin/trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: input.title,
+          held_on: input.heldOn,
+          timezone: 'Asia/Jakarta',
+        }),
+      });
+      return parseTrainingDetail(await readJson(response));
+    },
+    async createTrainingDay(trainingId, input) {
+      const response = await mutation(
+        `/admin/trainings/${encodeURIComponent(trainingId)}/days`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label: input.label,
+            held_on: input.heldOn,
+          }),
+        },
+      );
+      const value = object(await readJson(response));
+      if (!Array.isArray(value.sessions)) {
+        throw new AdminServiceError(
+          'contract-unavailable',
+          'Hari pelatihan tidak valid.',
+        );
+      }
+      return {
+        id: text(value, 'id'),
+        trainingId: text(value, 'training_id'),
+        dayNumber: integer(value, 'day_number'),
+        label: text(value, 'label'),
+        heldOn: text(value, 'held_on'),
+        sessions: value.sessions.map(parseSession),
+      };
+    },
+    async getTraining(id) {
+      const response = await checked(
+        await request(`/admin/trainings/${encodeURIComponent(id)}`),
+      );
+      return parseTrainingDetail(await readJson(response));
+    },
+    async importTrainingParticipants(trainingId, rows) {
+      const response = await mutation(
+        `/admin/trainings/${encodeURIComponent(trainingId)}/participants/import`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rows: rows.map((row) => ({
+              code: row.participantCode,
+              name: row.participantName,
+            })),
+          }),
+        },
+      );
+      const source = object(await readJson(response));
+      return {
+        accepted: integer(source, 'accepted'),
+        created: integer(source, 'created'),
+        attached: integer(source, 'attached'),
+      };
+    },
+    async issueTrainingInvites(trainingId, purpose) {
+      const response = await mutation(
+        `/admin/trainings/${encodeURIComponent(trainingId)}/invites`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ purpose, only_pending: true }),
+        },
+      );
+      const source = object(await readJson(response));
+      if (!Array.isArray(source.invites)) {
+        throw new AdminServiceError(
+          'contract-unavailable',
+          'Hasil undangan pelatihan tidak valid.',
+        );
+      }
+      return {
+        issued: integer(source, 'issued'),
+        expiresAt: text(source, 'expires_at'),
+        invites: source.invites.map((item): IssuedInvite => {
+          const row = object(item);
+          return {
+            participantId: text(row, 'participant_id'),
+            code: text(row, 'code'),
+            name: text(row, 'name'),
+            token: text(row, 'token'),
+            expiresAt: text(row, 'expires_at'),
+          };
+        }),
+      };
+    },
     async listSessions() {
       const response = await checked(await request('/admin/sessions'));
       const value = await readJson(response);
@@ -184,6 +379,8 @@ export function createFetchAdminService(): AdminService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          training_id: input.trainingId,
+          day_id: input.dayId ?? null,
           title: input.title,
           starts_at: new Date(input.startsAt).toISOString(),
           ends_at: new Date(input.endsAt).toISOString(),
@@ -196,6 +393,28 @@ export function createFetchAdminService(): AdminService {
           geo_accuracy_m: input.geoAccuracyMeters,
         }),
       });
+      return parseSession(await readJson(response));
+    },
+    async updateSession(id, input) {
+      const response = await mutation(
+        `/admin/sessions/${encodeURIComponent(id)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: input.title,
+            starts_at: new Date(input.startsAt).toISOString(),
+            ends_at: new Date(input.endsAt).toISOString(),
+            timezone: 'Asia/Jakarta',
+            late_after_min: input.lateAfterMinutes,
+            geo_required: input.geoRequired,
+            geo_latitude: input.geoCenter?.latitude ?? null,
+            geo_longitude: input.geoCenter?.longitude ?? null,
+            geo_radius_m: input.geoRadiusMeters,
+            geo_accuracy_m: input.geoAccuracyMeters,
+          }),
+        },
+      );
       return parseSession(await readJson(response));
     },
     async openSession(id) {
@@ -211,6 +430,17 @@ export function createFetchAdminService(): AdminService {
         { method: 'POST' },
       );
       return parseSession(await readJson(response));
+    },
+    async listParticipants() {
+      const response = await checked(await request('/admin/participants'));
+      const value = await readJson(response);
+      if (!Array.isArray(value)) {
+        throw new AdminServiceError(
+          'contract-unavailable',
+          'Daftar peserta tidak valid.',
+        );
+      }
+      return value.map(parseParticipant);
     },
     async getRecap(id) {
       const response = await checked(
@@ -238,28 +468,9 @@ export function createFetchAdminService(): AdminService {
       }
       return { accepted: Number(source.accepted) };
     },
-    async issueInvite(participantCode, purpose) {
-      const participantsResponse = await checked(
-        await request('/admin/participants'),
-      );
-      const participants = await readJson(participantsResponse);
-      if (!Array.isArray(participants)) {
-        throw new AdminServiceError(
-          'contract-unavailable',
-          'Daftar peserta tidak valid.',
-        );
-      }
-      const participant = participants
-        .map(object)
-        .find((item) => item.code === participantCode);
-      if (!participant) {
-        throw new AdminServiceError(
-          'not-found',
-          'Peserta belum tersedia di server. Impor peserta lebih dahulu.',
-        );
-      }
+    async issueInvite(participantId, purpose) {
       const response = await mutation(
-        `/admin/participants/${encodeURIComponent(text(participant, 'id'))}/invite`,
+        `/admin/participants/${encodeURIComponent(participantId)}/invite`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

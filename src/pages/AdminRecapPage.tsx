@@ -27,8 +27,8 @@ export function AdminRecapPage() {
     let active = true;
     setLoading(true);
     void loadAdminService()
-      .then((service) => service.getRecap(sessionId))
-      .then((data) => {
+      .then(async (service) => {
+        const data = await service.getRecap(sessionId);
         if (active) setRecap(data);
       })
       .catch((reason: unknown) => {
@@ -109,14 +109,35 @@ export function AdminRecapPage() {
         )}
         {recap && recap.roster.length === 0 && (
           <EmptyState
-            title="Belum ada data rekap"
-            description="Roster sesi belum berisi peserta."
+            title="Belum ada peserta di sesi ini"
+            description="Impor peserta pada halaman pelatihan agar roster Sesi 1 dan Sesi 2 terisi otomatis."
+            action={
+              recap.session.trainingId ? (
+                <Link
+                  className={styles.backLink}
+                  to={`/admin/pelatihan/${encodeURIComponent(recap.session.trainingId)}`}
+                >
+                  Kembali ke hari pelatihan
+                </Link>
+              ) : (
+                <Link className={styles.backLink} to="/admin/pelatihan">
+                  Kembali ke daftar pelatihan
+                </Link>
+              )
+            }
           />
         )}
         {recap && recap.roster.length > 0 && summary && (
           <>
-            <Link className={styles.backLink} to="/admin/sesi">
-              ← Kembali ke daftar sesi
+            <Link
+              className={styles.backLink}
+              to={
+                recap.session.trainingId
+                  ? `/admin/pelatihan/${encodeURIComponent(recap.session.trainingId)}`
+                  : '/admin/pelatihan'
+              }
+            >
+              ← Kembali ke hari pelatihan
             </Link>
             <div className={styles.adminTitle}>
               <p>REKAP KEHADIRAN</p>

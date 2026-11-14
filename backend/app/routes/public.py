@@ -15,6 +15,7 @@ from ..models import (
     EnrollmentInvite,
     Participant,
     Role,
+    SessionParticipant,
     SessionStatus,
     TrainingSession,
 )
@@ -38,9 +39,11 @@ def get_biometric_engine(settings: Settings = Depends(get_settings)) -> Biometri
 
 def domain_http(exc: DomainError) -> HTTPException:
     gone = {"invite_invalid", "challenge_invalid", "nonce_invalid"}
-    return HTTPException(
-        status.HTTP_410_GONE if exc.code in gone else status.HTTP_409_CONFLICT, str(exc)
-    )
+    if exc.code in gone:
+        return HTTPException(status.HTTP_410_GONE, str(exc))
+    if exc.code == "not_on_roster":
+        return HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
+    return HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
 @router.get("/enroll/{token}")
@@ -133,9 +136,19 @@ async def enrollment_submit(
 
 @router.get("/sessions/active", response_model=list[SessionView])
 def active_sessions(auth=Depends(require_roles(Role.participant)), db: Session = Depends(get_db)):
-    del auth
+    now = datetime.now(UTC)
     return list(
-        db.scalars(select(TrainingSession).where(TrainingSession.status == SessionStatus.open))
+        db.scalars(
+            select(TrainingSession)
+            .join(SessionParticipant, SessionParticipant.session_id == TrainingSession.id)
+            .where(
+                TrainingSession.status == SessionStatus.open,
+                TrainingSession.starts_at <= now,
+                TrainingSession.ends_at >= now,
+                SessionParticipant.participant_id == auth.subject_id,
+            )
+            .order_by(TrainingSession.starts_at)
+        )
     )
 
 
@@ -238,6 +251,13 @@ def recover_attempt(
     response = {"status": attempt.status.value, "request_id": attempt.id}
     if attempt.status.value in {"accepted", "already_recorded"}:
         attendance = db.scalar(select(Attendance).where(Attendance.attempt_id == attempt.id))
+        if not attendance:
+            attendance = db.scalar(
+                select(Attendance).where(
+                    Attendance.participant_id == attempt.participant_id,
+                    Attendance.session_id == attempt.session_id,
+                )
+            )
         participant = db.get(Participant, auth.subject_id)
         if attendance:
             response["attendance"] = {

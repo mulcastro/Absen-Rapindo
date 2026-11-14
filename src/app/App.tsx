@@ -9,8 +9,8 @@ import { NotFoundPage } from '../pages/NotFoundPage';
 import { ResultPage } from '../pages/ResultPage';
 import { EnrollmentPage } from '../pages/EnrollmentPage';
 import { LoginPage } from '../pages/LoginPage';
-import { AdminSessionsPage } from '../pages/AdminSessionsPage';
-import { AdminParticipantsPage } from '../pages/AdminParticipantsPage';
+import { AdminTrainingPage } from '../pages/AdminTrainingPage';
+import { AdminTrainingsPage } from '../pages/AdminTrainingsPage';
 import { InstallPage } from '../pages/InstallPage';
 import { ActiveSessionsPage } from '../pages/ActiveSessionsPage';
 import { AdminAuditPage } from '../pages/AdminAuditPage';
@@ -33,7 +33,18 @@ export function App() {
         <Route path="/daftar/:token" element={<EnrollmentPage />} />
         <Route path="/absen/:sessionId" element={<AttendancePage />} />
         <Route path="/hasil/:attemptId" element={<ResultPage />} />
-        <Route path="/admin" element={<Navigate replace to="/admin/sesi" />} />
+        <Route
+          path="/admin"
+          element={<Navigate replace to="/admin/pelatihan" />}
+        />
+        <Route
+          path="/admin/sesi"
+          element={<Navigate replace to="/admin/pelatihan" />}
+        />
+        <Route
+          path="/admin/peserta"
+          element={<Navigate replace to="/admin/pelatihan" />}
+        />
         <Route
           path="/admin/sesi/:sessionId"
           element={
@@ -47,24 +58,24 @@ export function App() {
         />
         <Route path="/admin/masuk" element={<LoginPage role="admin" />} />
         <Route
-          path="/admin/sesi"
+          path="/admin/pelatihan"
           element={
             <RequireRole
               roles={['admin', 'instructor']}
               loginPath="/admin/masuk"
             >
-              <AdminSessionsPage />
+              <AdminTrainingsPage />
             </RequireRole>
           }
         />
         <Route
-          path="/admin/peserta"
+          path="/admin/pelatihan/:trainingId"
           element={
             <RequireRole
               roles={['admin', 'instructor']}
               loginPath="/admin/masuk"
             >
-              <AdminParticipantsPage />
+              <AdminTrainingPage />
             </RequireRole>
           }
         />
