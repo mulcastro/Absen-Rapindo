@@ -59,20 +59,30 @@ def upgrade() -> None:
             ForeignKeyConstraint(["participant_id"], ["participants.id"]),
             PrimaryKeyConstraint("session_id", "participant_id"),
         )
-    op.create_table(
-        "training_days",
-        Column("id", String(length=36), nullable=False),
-        Column("training_id", String(length=36), nullable=False),
-        Column("day_number", Integer(), nullable=False),
-        Column("label", String(length=100), nullable=False),
-        Column("held_on", Date(), nullable=False),
-        Column("created_at", DateTime(timezone=True), nullable=False),
-        ForeignKeyConstraint(["training_id"], ["trainings.id"]),
-        PrimaryKeyConstraint("id"),
-        UniqueConstraint("training_id", "day_number"),
+    if "training_days" not in existing_tables:
+        op.create_table(
+            "training_days",
+            Column("id", String(length=36), nullable=False),
+            Column("training_id", String(length=36), nullable=False),
+            Column("day_number", Integer(), nullable=False),
+            Column("label", String(length=100), nullable=False),
+            Column("held_on", Date(), nullable=False),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+            ForeignKeyConstraint(["training_id"], ["trainings.id"]),
+            PrimaryKeyConstraint("id"),
+            UniqueConstraint("training_id", "day_number"),
+        )
+    session_columns = {column["name"] for column in inspect(bind).get_columns("sessions")}
+    session_foreign_keys = inspect(bind).get_foreign_keys("sessions")
+    has_day_foreign_key = any(
+        key["referred_table"] == "training_days"
+        and key["constrained_columns"] == ["day_id"]
+        for key in session_foreign_keys
     )
-    op.add_column("sessions", Column("day_id", String(length=36), nullable=True))
-    op.create_foreign_key("fk_sessions_day_id", "sessions", "training_days", ["day_id"], ["id"])
+    if "day_id" not in session_columns:
+        op.add_column("sessions", Column("day_id", String(length=36), nullable=True))
+    if not has_day_foreign_key:
+        op.create_foreign_key("fk_sessions_day_id", "sessions", "training_days", ["day_id"], ["id"])
 
 
 def downgrade() -> None:
